@@ -1,0 +1,86 @@
+/* Caderno — service worker gerado no build. */
+const VERSION = '__VERSION__'
+const BASE = '__BASE__'
+const PRECACHE = __PRECACHE__
+
+const CACHE_NAME = `caderno-${VERSION}`
+const INDEX_URL = `${BASE}index.html`
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE_NAME)
+      await cache.addAll(
+        PRECACHE.map((url) => new Request(url, { cache: 'reload' })),
+      )
+      await self.skipWaiting()
+    })(),
+  )
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys()
+      await Promise.all(
+        keys
+          .filter((key) => key.startsWith('caderno-') && key !== CACHE_NAME)
+          .map((key) => caches.delete(key)),
+      )
+      await self.clients.claim()
+    })(),
+  )
+})
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request
+  if (request.method !== 'GET') return
+
+  const url = new URL(request.url)
+  if (url.origin !== self.location.origin) return
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(request)
+          if (response.ok) {
+            const cache = await caches.open(CACHE_NAME)
+            await cache.put(INDEX_URL, response.clone())
+          }
+          return response
+        } catch {
+          const cached =
+            (await caches.match(INDEX_URL)) || (await caches.match(BASE))
+          if (cached) return cached
+          return new Response(
+            'O Caderno está offline e ainda não foi aberto neste aparelho.',
+            {
+              status: 503,
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            },
+          )
+        }
+      })(),
+    )
+    return
+  }
+
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(request)
+      if (cached) return cached
+
+      try {
+        const response = await fetch(request)
+        if (response.ok) {
+          const cache = await caches.open(CACHE_NAME)
+          await cache.put(request, response.clone())
+        }
+        return response
+      } catch {
+        return new Response('', { status: 504, statusText: 'Offline' })
+      }
+    })(),
+  )
+})

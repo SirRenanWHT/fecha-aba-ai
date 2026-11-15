@@ -1,0 +1,40 @@
+{
+  "name": "caderno",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "serve": "node scripts/serve.mjs",
+    "check": "tsc --noEmit",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:f3": "node scripts/e2e-f3.mjs",
+    "e2e:theme": "node scripts/e2e-theme.mjs",
+    "e2e:f4": "node scripts/e2e-f4.mjs",
+    "e2e:f5": "node scripts/e2e-f5.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/caveat": "^5.3.0",
+    "@fontsource-variable/fraunces": "^5.0.0",
+    "@fontsource-variable/inter": "^5.0.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/lora": "^5.3.0",
+    "dompurify": "^3.4.17",
+    "nanoid": "^5.0.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.21.5",
+    "typescript": "~5.7.2",
+    "vite": "^5.4.11"
+  }
+}
