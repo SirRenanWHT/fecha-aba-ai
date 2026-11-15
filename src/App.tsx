@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'rea
 import { AppShell } from '@/app/AppShell'
 import { ToastProvider } from '@/components/Toast'
 import { ActivitiesPage } from '@/features/activities/ActivitiesPage'
+import { DeadlineNotifications } from '@/features/activities/DeadlineNotifications'
 import { ActivityEditorPage } from '@/features/activities/ActivityEditorPage'
 import { NoteEditorPage } from '@/features/notes/NoteEditorPage'
 import { NotesPage } from '@/features/notes/NotesPage'
@@ -52,6 +53,7 @@ export function App() {
     <HashRouter>
       <ToastProvider>
         <ThemeWatcher />
+        <DeadlineNotifications />
         <ScrollToTop />
         <Routes>
           <Route element={<AppShell />}>

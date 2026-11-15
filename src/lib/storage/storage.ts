@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   notes: `${NAMESPACE}:notes`,
   activities: `${NAMESPACE}:activities`,
   settings: `${NAMESPACE}:settings`,
+  deadlineReminders: `${NAMESPACE}:deadline-reminders`,
   meta: `${NAMESPACE}:meta`,
 } as const
 

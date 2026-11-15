@@ -49,6 +49,9 @@ export function SettingsPage() {
   const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null)
   const [pendingBackup, setPendingBackup] = useState<BackupPayload | null>(null)
   const [backupDialogOpen, setBackupDialogOpen] = useState(false)
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
+    'Notification' in window ? Notification.permission : 'unsupported',
+  )
   const backupInputRef = useRef<HTMLInputElement>(null)
   const usage = storageUsageBytes()
 
@@ -165,6 +168,26 @@ export function SettingsPage() {
     notify('Use o menu do navegador para instalar o Caderno')
   }
 
+  async function handleDeadlineNotifications(): Promise<void> {
+    if (settings.deadlineNotifications) {
+      settingsStore.setDeadlineNotifications(false)
+      notify('Lembretes de prazo desativados')
+      return
+    }
+    if (!('Notification' in window)) {
+      setNotificationPermission('unsupported')
+      return
+    }
+    const permission = await Notification.requestPermission()
+    setNotificationPermission(permission)
+    if (permission === 'granted') {
+      settingsStore.setDeadlineNotifications(true)
+      notify('Lembretes ativados para um dia antes e no dia do prazo')
+    } else if (permission === 'denied') {
+      notify('Ative as notificações do Caderno nas permissões do navegador')
+    }
+  }
+
   return (
     <div className="page settings-page">
       <header className="page-head">
@@ -240,6 +263,32 @@ export function SettingsPage() {
           Depois de instalado, o Caderno abre sem internet — os dados continuam salvos no
           aparelho.
         </p>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-card-head">
+          <h2 className="settings-title">Lembretes de prazo</h2>
+          <p className="settings-sub">
+            Receba uma notificação um dia antes e no dia do vencimento. O Caderno precisa estar
+            aberto para conferir os prazos.
+          </p>
+        </div>
+        {notificationPermission === 'unsupported' ? (
+          <p className="install-hint">Este navegador não oferece notificações.</p>
+        ) : notificationPermission === 'denied' && !settings.deadlineNotifications ? (
+          <p className="install-hint">
+            As notificações estão bloqueadas. Permita-as nas configurações do navegador para ativar
+            os lembretes.
+          </p>
+        ) : (
+          <Button
+            variant={settings.deadlineNotifications ? 'secondary' : 'primary'}
+            icon="bell"
+            onClick={() => void handleDeadlineNotifications()}
+          >
+            {settings.deadlineNotifications ? 'Desativar lembretes' : 'Ativar notificações'}
+          </Button>
+        )}
       </section>
 
       <section className="settings-card">

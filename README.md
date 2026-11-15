@@ -70,6 +70,8 @@ pnpm dev
   subtarefas conclui a atividade; baixar o progresso manual reabre.
 - **Planejamento**: prazo com destaque de atrasadas, prioridade (baixa/média/alta) e
   projeto.
+- **Lembretes de prazo**: notificações opcionais um dia antes e no dia do vencimento;
+  o app verifica os prazos enquanto está aberto.
 - **Visualizações**: lista com resumo geral e filtros, e kanban em quatro colunas com
   troca de etapa pelo seletor do card.
 - **Exportar/importar atividades**: arquivo `.json` próprio, com cópias na importação.
@@ -163,7 +165,7 @@ sempre uma ação explícita sua — o conteúdo viaja dentro do link/arquivo, s
 
 - Publicar no GitHub Pages para instalar no celular sem depender do PC.
 - Sincronização automática entre PC e celular (hoje é manual, por backup).
-- Lembretes de prazo e notificações.
+- Notificações de prazo em segundo plano quando o app está fechado (exigem serviço push).
 - Compartilhar atividades individuais por link, como já acontece com as notas.
 
 ## Decisões de produto

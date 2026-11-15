@@ -6,6 +6,7 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number]
 
 const settingsSchema = z.object({
   theme: z.enum(THEME_PREFERENCES).default('system'),
+  deadlineNotifications: z.boolean().default(false),
 })
 
 export type Settings = z.infer<typeof settingsSchema>
@@ -16,15 +17,21 @@ const listeners = new Set<Listener>()
 
 function loadSettings(): Settings {
   if (hasKey(STORAGE_KEYS.settings)) {
-    return readValue(STORAGE_KEYS.settings, settingsSchema, { theme: 'system' })
+    return readValue(STORAGE_KEYS.settings, settingsSchema, {
+      theme: 'system',
+      deadlineNotifications: false,
+    })
   }
   if (hasKey(LEGACY_KEYS.settings)) {
-    const legacy = readValue(LEGACY_KEYS.settings, settingsSchema, { theme: 'system' })
+    const legacy = readValue(LEGACY_KEYS.settings, settingsSchema, {
+      theme: 'system',
+      deadlineNotifications: false,
+    })
     writeValue(STORAGE_KEYS.settings, legacy)
     localStorage.removeItem(LEGACY_KEYS.settings)
     return legacy
   }
-  return { theme: 'system' }
+  return { theme: 'system', deadlineNotifications: false }
 }
 
 let settings: Settings = loadSettings()
@@ -62,6 +69,12 @@ export const settingsStore = {
     settings = { ...settings, theme }
     writeValue(STORAGE_KEYS.settings, settings)
     applyTheme(theme)
+    emit()
+  },
+
+  setDeadlineNotifications(enabled: boolean): void {
+    settings = { ...settings, deadlineNotifications: enabled }
+    writeValue(STORAGE_KEYS.settings, settings)
     emit()
   },
 }

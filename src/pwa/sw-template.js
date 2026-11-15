@@ -32,6 +32,24 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const activityId = event.notification.data?.activityId
+  if (!activityId) return
+  const targetUrl = `${self.location.origin}${BASE}#/atividade/${encodeURIComponent(activityId)}`
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of windows) {
+        if ('navigate' in client) await client.navigate(targetUrl)
+        await client.focus()
+        return
+      }
+      await self.clients.openWindow(targetUrl)
+    })(),
+  )
+})
+
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
