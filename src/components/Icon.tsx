@@ -228,6 +228,30 @@ const ICONS = {
       <path d="M11 18h2" />
     </>
   ),
+  'check-square': (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M8 12l3 3 5-6" />
+    </>
+  ),
+  indent: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M3 12h5" />
+      <path d="M3 18h18" />
+      <path d="m8 9 3 3-3 3" />
+      <path d="M14 12h7" />
+    </>
+  ),
+  outdent: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M3 12h5" />
+      <path d="M3 18h18" />
+      <path d="m11 9-3 3 3 3" />
+      <path d="M14 12h7" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof ICONS

@@ -49,6 +49,7 @@ pnpm dev
 ### Notas
 
 - **Editor rich text**: negrito, itálico, sublinhado, riscado, títulos H2/H3, listas,
+  checkboxes clicáveis com níveis hierárquicos e conclusão automática dos itens pais,
   citação, links e limpar formatação. Todo conteúdo é sanitizado com DOMPurify antes
   de ser salvo.
 - **Fontes por nota**: Inter, Lora, Caveat (manuscrita) e Mono — aplicadas no editor e
