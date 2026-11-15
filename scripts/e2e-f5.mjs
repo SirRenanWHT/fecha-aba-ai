@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const CHROME = process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-const APP_URL = 'http://127.0.0.1:4173/'
+const APP_URL = process.env.APP_URL ?? 'http://127.0.0.1:4173/'
 const PORT = 9337
 const OUT = 'shots'
 
@@ -143,7 +143,13 @@ async function main() {
   results.manifestUrl = manifestResult.url
   results.manifestErrors = (manifestResult.errors ?? []).map((error) => error.message)
 
-  const manifest = await evaluate("fetch('/manifest.webmanifest').then((response) => response.json())")
+  results.manifestLink = await evaluate(
+    "document.querySelector('link[rel=\"manifest\"]')?.href ?? null",
+  )
+
+  const manifest = await evaluate(
+    `fetch(${JSON.stringify(results.manifestLink)}).then((response) => response.json())`,
+  )
   results.manifestName = manifest.name
   results.manifestDisplay = manifest.display
   results.manifestIcons = (manifest.icons ?? []).length
@@ -154,9 +160,6 @@ async function main() {
       fetch(icon.src).then((response) => response.status)
     ))
   `)
-  results.manifestLink = await evaluate(
-    "document.querySelector('link[rel=\"manifest\"]')?.getAttribute('href') ?? null",
-  )
 
   const installability = await send('Page.getInstallabilityErrors').catch(() => null)
   results.installabilityErrors = (installability?.installabilityErrors ?? []).map(
@@ -175,6 +178,7 @@ async function main() {
 
   results.cache = await evaluate(`
     (async () => {
+      const base = new URL('./', location.href).pathname;
       const names = await caches.keys();
       const name = names.find((key) => key.startsWith('caderno-')) ?? null;
       if (!name) return null;
@@ -183,9 +187,10 @@ async function main() {
       return {
         name,
         count: keys.length,
-        hasIndex: Boolean(await cache.match('/index.html')),
-        hasManifest: Boolean(await cache.match('/manifest.webmanifest')),
-        hasIcon: Boolean(await cache.match('/icons/icon-192.png')),
+        base,
+        hasIndex: Boolean(await cache.match(base + 'index.html')),
+        hasManifest: Boolean(await cache.match(base + 'manifest.webmanifest')),
+        hasIcon: Boolean(await cache.match(base + 'icons/icon-192.png')),
       };
     })()
   `)
@@ -271,7 +276,9 @@ async function main() {
   if (results.manifestDisplay !== 'standalone') failed.push('display não é standalone')
   if (results.manifestIcons < 3) failed.push('manifest sem os 3 ícones')
   if (results.shortcuts !== 2) failed.push('atalhos do manifest ausentes')
-  if (results.manifestLink !== '/manifest.webmanifest') failed.push('link do manifest ausente')
+  if (!results.manifestLink?.endsWith('/manifest.webmanifest')) {
+    failed.push('link do manifest ausente')
+  }
   if (!results.manifestFetchOk) failed.push('manifest não pôde ser lido')
   if ((results.iconStatuses ?? []).some((status) => status !== 200)) {
     failed.push('ícone do manifest não carregou')

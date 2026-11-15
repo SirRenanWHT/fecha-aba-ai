@@ -8,6 +8,8 @@ offline e sem conta.
 compartilhamento e backup; atividades com progresso e kanban; PWA instalável que
 funciona offline depois da primeira visita.
 
+**Publicado em:** https://sirrenanwht.github.io/fecha-aba-ai/
+
 ## Como abrir agora (Windows)
 
 Dê dois cliques em **`iniciar.cmd`**. Ele gera o build se necessário, sobe um servidor
