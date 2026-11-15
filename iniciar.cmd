@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-set "DSH_NODE=C:\Users\renan\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
+set "DSH_NODE=%USERPROFILE%\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
 
 where node >nul 2>nul
 if not errorlevel 1 (

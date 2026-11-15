@@ -24,8 +24,8 @@ pnpm dev
 > embutido do ambiente. Para usar `pnpm` no terminal, chame o executável completo:
 >
 > ```powershell
-> & "C:\Users\renan\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe" `
->   "C:\Users\renan\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\bin\pnpm.mjs" dev
+> & "$env:USERPROFILE\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe" `
+>   "$env:USERPROFILE\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\bin\pnpm.mjs" dev
 > ```
 
 ## Scripts
