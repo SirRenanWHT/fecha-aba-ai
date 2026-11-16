@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AppShell } from '@/app/AppShell'
+import { VersionUpdateNotice } from '@/app/VersionUpdateNotice'
 import { ToastProvider } from '@/components/Toast'
 import { ActivitiesPage } from '@/features/activities/ActivitiesPage'
 import { DeadlineNotifications } from '@/features/activities/DeadlineNotifications'
@@ -54,6 +55,7 @@ export function App() {
       <ToastProvider>
         <ThemeWatcher />
         <DeadlineNotifications />
+        <VersionUpdateNotice />
         <ScrollToTop />
         <Routes>
           <Route element={<AppShell />}>

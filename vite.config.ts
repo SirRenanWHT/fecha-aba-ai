@@ -1,9 +1,18 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+
+const BUILD_ID = process.env.GITHUB_SHA?.slice(0, 12) || (() => {
+  try {
+    return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim()
+  } catch {
+    return 'local'
+  }
+})()
 
 /**
  * Gera o service worker depois do build, com a lista exata dos arquivos
@@ -37,7 +46,7 @@ function pwaPlugin(): Plugin {
 
       const normalized = files
         .map((file) => relative(outputRoot, file).split(sep).join('/'))
-        .filter((file) => file !== 'sw.js' && !file.endsWith('.map'))
+        .filter((file) => file !== 'sw.js' && file !== 'version.json' && !file.endsWith('.map'))
         .sort()
 
       const precache = [
@@ -60,6 +69,10 @@ function pwaPlugin(): Plugin {
         .replaceAll('__BASE__', base)
         .replace('__PRECACHE__', JSON.stringify(precache, null, 2))
 
+      writeFileSync(
+        join(outputRoot, 'version.json'),
+        `${JSON.stringify({ version: BUILD_ID })}\n`,
+      )
       writeFileSync(join(outputRoot, 'sw.js'), serviceWorker)
       console.log(
         `\nPWA: sw.js gerado com ${precache.length} arquivos (versão ${version})`,
@@ -70,6 +83,9 @@ function pwaPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), pwaPlugin()],
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

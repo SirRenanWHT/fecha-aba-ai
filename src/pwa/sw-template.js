@@ -57,6 +57,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
 
+  const versionUrl = new URL(`${BASE}version.json`, self.location.origin)
+  if (url.href === versionUrl.href) {
+    event.respondWith(fetch(request, { cache: 'no-store' }))
+    return
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {

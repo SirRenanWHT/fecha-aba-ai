@@ -1131,6 +1131,34 @@ p {
   pointer-events: none;
 }
 
+.app-update-notice {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, calc(100vw - 28px));
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
+.app-update-notice > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-update-notice > .btn {
+  flex-shrink: 0;
+}
+
 .toast {
   display: flex;
   align-items: center;
