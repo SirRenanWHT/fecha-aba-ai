@@ -3027,6 +3027,31 @@ p {
   color: var(--muted);
 }
 
+.hcaptcha-challenge {
+  display: flex;
+  justify-content: center;
+  min-height: 78px;
+  overflow: hidden;
+}
+
+.collab-captcha-panel {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 430px;
+  margin: 36px auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-align: center;
+}
+
+.collab-captcha-panel > p:first-child {
+  margin: 0;
+  color: var(--muted);
+}
+
 /* ---------- Página de importação ---------------------------- */
 
 .import-canvas {

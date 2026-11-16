@@ -4,6 +4,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import Collaboration from '@tiptap/extension-collaboration'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button, IconButton } from '@/components/Button'
+import { HCaptchaChallenge } from '@/components/HCaptchaChallenge'
 import { EmptyState } from '@/components/EmptyState'
 import { Icon } from '@/components/Icon'
 import { useCoverUrl } from '@/hooks/useCoverUrl'
@@ -28,8 +29,12 @@ export function CollaborativeNotePage() {
   const [session, setSession] = useState<Session | null>(null)
   const [status, setStatus] = useState<Status>('loading')
   const [error, setError] = useState('')
+  const [captchaVisible, setCaptchaVisible] = useState(false)
+  const [captchaMessage, setCaptchaMessage] = useState('')
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [title, setTitle] = useState('')
   const sessionRef = useRef<Session | null>(null)
+  const openInviteRef = useRef<(captchaToken?: string) => void>(() => undefined)
 
   const editor = useEditor(
     {
@@ -59,11 +64,13 @@ export function CollaborativeNotePage() {
     let activeDoc: Y.Doc | null = null
     let stopStatus: (() => void) | null = null
 
-    async function open(): Promise<void> {
+    async function open(captchaToken?: string): Promise<void> {
       setStatus('loading')
       setError('')
+      setCaptchaMessage('')
+      setCaptchaVisible(false)
       try {
-        const joined = await joinCollaborativeInvite(token)
+        const joined = await joinCollaborativeInvite(token, captchaToken)
         if (cancelled) return
 
         const doc = new Y.Doc()
@@ -98,16 +105,46 @@ export function CollaborativeNotePage() {
       } catch (openError) {
         if (cancelled) return
         console.error(openError)
+        const details = openError instanceof Error ? openError.message : ''
+        const code = typeof openError === 'object' && openError !== null && 'code' in openError
+          ? String(openError.code)
+          : ''
+        if (/captcha/i.test(`${code} ${details}`)) {
+          setCaptchaMessage('A verificação hCaptcha falhou ou expirou. Faça o desafio novamente.')
+          setCaptchaVisible(true)
+          setCaptchaResetKey((current) => current + 1)
+          setStatus('loading')
+          return
+        }
         setError(
-          openError instanceof Error
-            ? openError.message
+          details
+            ? details
             : 'Não foi possível abrir este convite.',
         )
         setStatus('error')
       }
     }
 
-    void open()
+    openInviteRef.current = (captchaToken) => { void open(captchaToken) }
+    async function prepareInvite(): Promise<void> {
+      try {
+        const { hasSupabaseSession, HCAPTCHA_SITE_KEY } = await import('@/lib/collaboration/supabase')
+        if (await hasSupabaseSession()) {
+          await open()
+        } else if (HCAPTCHA_SITE_KEY) {
+          setCaptchaVisible(true)
+          setStatus('loading')
+        } else {
+          setError('A Sitekey pública do hCaptcha não está configurada no app.')
+          setStatus('error')
+        }
+      } catch (prepareError) {
+        if (cancelled) return
+        setError(prepareError instanceof Error ? prepareError.message : 'Não foi possível iniciar a conexão.')
+        setStatus('error')
+      }
+    }
+    void prepareInvite()
     return () => {
       cancelled = true
       stopStatus?.()
@@ -145,7 +182,20 @@ export function CollaborativeNotePage() {
           <span className="editor-bar-title">Nota compartilhada</span>
           <div className="editor-bar-side" />
         </header>
-        <p className="collab-message"><Icon name="clock" size={16} /> Entrando na nota compartilhada…</p>
+        {captchaVisible ? (
+          <div className="collab-captcha-panel">
+            <p>Para abrir esta nota, confirme que você é uma pessoa:</p>
+            <HCaptchaChallenge
+              resetKey={captchaResetKey}
+              onVerify={(captchaToken) => openInviteRef.current(captchaToken)}
+              onExpire={() => setCaptchaMessage('O desafio hCaptcha expirou. Faça a verificação novamente.')}
+              onError={(message) => setCaptchaMessage(`hCaptcha: ${message}`)}
+            />
+            {captchaMessage ? <p className="share-error">{captchaMessage}</p> : null}
+          </div>
+        ) : (
+          <p className="collab-message"><Icon name="clock" size={16} /> Entrando na nota compartilhada…</p>
+        )}
       </div>
     )
   }

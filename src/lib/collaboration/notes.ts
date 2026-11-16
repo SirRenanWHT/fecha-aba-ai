@@ -89,8 +89,11 @@ function makeInitialYjsState(note: NoteTransfer['note']): string {
   return encoded
 }
 
-export async function createCollaborativeInvite(transfer: NoteTransfer): Promise<string> {
-  await ensureAnonymousSession()
+export async function createCollaborativeInvite(
+  transfer: NoteTransfer,
+  captchaToken?: string,
+): Promise<string> {
+  await ensureAnonymousSession(captchaToken)
   const { data, error } = await supabase.rpc('create_collab_invite', {
     p_payload: transfer,
     p_state: makeInitialYjsState(transfer.note),
@@ -105,8 +108,9 @@ export async function createCollaborativeInvite(transfer: NoteTransfer): Promise
 
 export async function joinCollaborativeInvite(
   token: string,
+  captchaToken?: string,
 ): Promise<{ room: string; note: Note }> {
-  await ensureAnonymousSession()
+  await ensureAnonymousSession(captchaToken)
   const { data, error } = await supabase.rpc('join_collab_invite', { p_token: token })
   if (error) throw error
 

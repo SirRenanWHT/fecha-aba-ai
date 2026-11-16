@@ -107,6 +107,10 @@ pnpm dev
 
 As tabelas guardam apenas notas que receberam um convite. O script habilita RLS e
 restringe a leitura, escrita e canais Realtime aos participantes adicionados pelo convite.
+O hCaptcha usa a Sitekey pública configurada no app; no painel do hCaptcha, permita o
+hostname `sirrenanwht.github.io` para o site publicado. Para desenvolvimento local, o
+hCaptcha não aceita `localhost` nem `127.0.0.1`; use um hostname local personalizado
+apontado para `127.0.0.1` e inclua esse hostname na allowlist do sitekey.
 
 ### Base
 

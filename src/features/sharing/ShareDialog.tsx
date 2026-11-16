@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { IconButton } from '@/components/Button'
@@ -19,6 +19,10 @@ type ShareDialogProps = {
 }
 type BuildStatus = 'idle' | 'building' | 'ready' | 'error'
 
+const HCaptchaChallenge = lazy(() =>
+  import('@/components/HCaptchaChallenge').then((module) => ({ default: module.HCaptchaChallenge })),
+)
+
 export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
   const notes = useNotes()
   const notify = useToast()
@@ -32,6 +36,8 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
   const [collabLink, setCollabLink] = useState<string | null>(null)
   const [collabStatus, setCollabStatus] = useState<'idle' | 'creating' | 'error'>('idle')
   const [collabError, setCollabError] = useState<string | null>(null)
+  const [captchaVisible, setCaptchaVisible] = useState(false)
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const linkInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -45,6 +51,8 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
     setCollabLink(null)
     setCollabStatus('idle')
     setCollabError(null)
+    setCaptchaVisible(false)
+    setCaptchaResetKey(0)
 
     buildNotePayload(note)
       .then(async (built) => {
@@ -104,22 +112,70 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
     }
   }
 
-  async function createCollabLink(): Promise<void> {
+  async function beginCollabCreation(): Promise<void> {
+    if (!note || collabStatus === 'creating') return
+    setCollabError(null)
+    try {
+      const { hasSupabaseSession } = await import('@/lib/collaboration/supabase')
+      if (!(await hasSupabaseSession())) {
+        setCaptchaVisible(true)
+        return
+      }
+      await createCollabLink()
+    } catch (createError) {
+      showCollabError(createError)
+    }
+  }
+
+  async function createCollabLink(captchaToken?: string): Promise<void> {
     if (!note || collabStatus === 'creating') return
     setCollabStatus('creating')
     setCollabError(null)
     try {
       const transfer = await buildNoteTransfer(note)
       const { createCollaborativeInvite } = await import('@/lib/collaboration/notes')
-      const token = await createCollaborativeInvite(transfer)
+      const token = await createCollaborativeInvite(transfer, captchaToken)
       const base = new URL(import.meta.env.BASE_URL, window.location.origin).href
       setCollabLink(`${base}#/colaborar/${token}`)
       setCollabStatus('idle')
+      setCaptchaVisible(false)
     } catch (createError) {
-      console.error(createError)
-      setCollabStatus('error')
-      setCollabError('Não foi possível criar o convite. Confira a configuração do Supabase.')
+      showCollabError(createError)
+      try {
+        const { hasSupabaseSession } = await import('@/lib/collaboration/supabase')
+        if (await hasSupabaseSession()) {
+          setCaptchaVisible(false)
+        } else {
+          setCaptchaVisible(true)
+          if (/captcha/i.test(createError instanceof Error ? createError.message : '')) {
+            setCaptchaResetKey((current) => current + 1)
+          }
+        }
+      } catch {
+        setCaptchaVisible(false)
+      }
     }
+  }
+
+  function showCollabError(createError: unknown): void {
+    console.error(createError)
+    const details = createError instanceof Error ? createError.message : ''
+    const code = typeof createError === 'object' && createError !== null && 'code' in createError
+      ? String(createError.code)
+      : ''
+    setCollabStatus('error')
+    if (/captcha/i.test(`${code} ${details}`)) {
+      setCollabError('A verificação hCaptcha falhou ou expirou. Faça o desafio novamente.')
+    } else if (code === 'PGRST202' || /create_collab_invite/i.test(details)) {
+      setCollabError('As tabelas da colaboração ainda não estão configuradas. Execute supabase/collaboration.sql no SQL Editor do Supabase.')
+    } else {
+      setCollabError(details || 'Não foi possível criar o convite. Confira a configuração do Supabase.')
+    }
+  }
+
+  function handleCaptchaError(message: string): void {
+    setCollabError(`hCaptcha: ${message}`)
+    setCollabStatus('error')
   }
 
   async function copyCollabLink(): Promise<void> {
@@ -270,10 +326,20 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
                   <Button variant="primary" icon="copy" onClick={() => void copyCollabLink()}>Copiar convite</Button>
                 </>
               ) : (
-                <Button variant="secondary" icon="share" onClick={() => void createCollabLink()} disabled={collabStatus === 'creating'}>
+                <Button variant="secondary" icon="share" onClick={() => void beginCollabCreation()} disabled={collabStatus === 'creating'}>
                   {collabStatus === 'creating' ? 'Criando convite…' : 'Criar convite de colaboração'}
                 </Button>
               )}
+              {captchaVisible && !collabLink ? (
+                <Suspense fallback={<p className="share-status">Carregando a verificação…</p>}>
+                  <HCaptchaChallenge
+                    resetKey={captchaResetKey}
+                    onVerify={(token) => void createCollabLink(token)}
+                    onExpire={() => setCollabError('O desafio hCaptcha expirou. Faça a verificação novamente.')}
+                    onError={handleCaptchaError}
+                  />
+                </Suspense>
+              ) : null}
               {collabError ? <p className="share-error">{collabError}</p> : null}
             </section>
 
