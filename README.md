@@ -5,8 +5,8 @@ dados salvos no próprio aparelho. A proposta é ser instalável como PWA (sem A
 offline e sem conta.
 
 **Status: Fase 5 concluída — app completo.** Notas com rich text, fontes, capas,
-compartilhamento e backup; atividades com progresso e kanban; PWA instalável que
-funciona offline depois da primeira visita.
+compartilhamento e backup; atividades com progresso e kanban; colaboração ao vivo em
+notas por convite; PWA instalável que funciona offline depois da primeira visita.
 
 **Publicado em:** https://sirrenanwht.github.io/fecha-aba-ai/
 
@@ -63,6 +63,9 @@ pnpm dev
 - **Organização**: busca por título/conteúdo/tags (atalho `/`), filtro por tags
   combináveis, abas Todas / Fixadas / Arquivadas, tags e data relativa.
 - **Fluxo**: salvamento automático, excluir com desfazer, fixar e arquivar.
+- **Edição colaborativa**: convites permitem que outras pessoas editem título e conteúdo
+  da mesma nota em tempo real. As mudanças no texto são mescladas com Yjs; o acesso usa
+  identidade anônima do Supabase, sem cadastro.
 
 ### Atividades
 
@@ -87,16 +90,29 @@ pnpm dev
   grande demais para aplicativos de mensagem.
 - **Web Share API**: no celular, o botão “Compartilhar…” usa o compartilhamento nativo;
   no desktop ele é escondido e ficam “Copiar link” e “Baixar arquivo”.
+- **Convite de colaboração**: cria um link privado de acesso à nota. Qualquer pessoa com
+  o link pode entrar; o conteúdo é guardado no Supabase para sincronizar as edições.
 - **Backup completo**: exporta todas as notas, imagens de capa e preferências em um
   único JSON. Na restauração, você escolhe **mesclar** (adiciona cópias) ou
   **substituir tudo** (apaga o que existe antes).
 - **Importar uma nota avulsa**: o botão “Importar” na lista de notas (e em Ajustes)
   abre a prévia de um `.caderno.json` sem passar pelo backup.
 
+### Configurar colaboração no Supabase
+
+1. No projeto Supabase, abra **SQL Editor → New query**.
+2. Cole e execute o conteúdo de `supabase/collaboration.sql`.
+3. Acesse uma nota, escolha **Compartilhar** e clique em **Criar convite de colaboração**.
+4. Envie o link para a outra pessoa. Ela abre o link no app e entra na mesma nota.
+
+As tabelas guardam apenas notas que receberam um convite. O script habilita RLS e
+restringe a leitura, escrita e canais Realtime aos participantes adicionados pelo convite.
+
 ### Base
 
 - **Tema**: claro (papel), escuro e sistema — aplicado na hora e lembrado.
-- **Persistência**: `localStorage` versionado (`ndb:v2:*`), validado com Zod.
+- **Persistência**: `localStorage` versionado (`ndb:v2:*`), validado com Zod. As notas
+  comuns continuam locais; somente notas compartilhadas por convite usam o Supabase.
   As notas da Fase 1 (`ndb:v1:*`, texto puro) são convertidas para HTML na primeira
   abertura e a chave antiga é removida.
 - **Responsivo**: sidebar no desktop, navegação inferior + botão flutuante no celular.
@@ -139,6 +155,8 @@ src/
   lib/model/activity.ts        schema e regras de progresso/status
   lib/share/                   formato, codec do link, export/import e backup
   lib/storage/                 localStorage v2, IndexedDB, migração e seed
+  lib/collaboration/           convite, identidade anônima e sincronização Yjs
+  supabase/collaboration.sql   tabelas, funções e políticas de acesso
   lib/utils/                   datas, cores, HTML e classes
   pwa/sw-template.js           service worker (precache gerado no build)
   styles/global.css            design system
@@ -157,22 +175,25 @@ scripts/
 
 ## Dados e privacidade
 
-Nada sai do aparelho. Notas, atividades e preferências ficam no `localStorage`; imagens
-de capa ficam no IndexedDB (`ndb-images`). Compartilhar um link ou baixar um arquivo é
-sempre uma ação explícita sua — o conteúdo viaja dentro do link/arquivo, sem servidor.
+Notas comuns, atividades e preferências ficam no `localStorage`; imagens de capa ficam
+no IndexedDB (`ndb-images`). Ao criar um convite colaborativo, a nota e sua capa são
+enviadas ao Supabase para que as pessoas autorizadas pelo link possam trabalhar juntas.
+O convite funciona como uma chave de acesso: compartilhe-o apenas com quem deve editar.
 **Ajustes → Zona de risco** apaga notas, atividades, imagens e preferências.
 
 ## Próximos passos (fora do escopo original)
 
 - Publicar no GitHub Pages para instalar no celular sem depender do PC.
-- Sincronização automática entre PC e celular (hoje é manual, por backup).
+- Sincronização geral entre aparelhos para notas que não foram compartilhadas.
 - Notificações de prazo em segundo plano quando o app está fechado (exigem serviço push).
 - Compartilhar atividades individuais por link, como já acontece com as notas.
 
 ## Decisões de produto
 
 - Nome provisório **Caderno**, centralizado em `src/config.ts`.
-- Compartilhamento sem backend, por conteúdo autossuficiente.
+- Compartilhamento comum sem backend, por conteúdo autossuficiente.
+- Colaboração em tempo real no Supabase, autenticada por sessão anônima e protegida por
+  RLS e canais privados do Realtime.
 - Imagens fora do `localStorage` (IndexedDB), para não estourar a cota.
 - Sincronização PC ↔ celular manual, por backup.
 - Service worker com precache de todos os arquivos, para o app abrir offline.

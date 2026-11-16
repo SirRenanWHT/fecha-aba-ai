@@ -20,7 +20,7 @@ const ALLOWED_TAGS = [
   'a',
 ]
 
-const ALLOWED_ATTR = ['href', 'data-task', 'data-checked']
+const ALLOWED_ATTR = ['href', 'data-task', 'data-task-list', 'data-checked', 'data-type']
 
 /**
  * Conteúdo de nota é sempre passado por aqui antes de ir para o storage e

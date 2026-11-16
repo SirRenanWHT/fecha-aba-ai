@@ -2254,6 +2254,34 @@ p {
   list-style: none;
 }
 
+.rte-content li[data-task='true'] > label {
+  grid-column: 1;
+  grid-row: 1;
+  z-index: 1;
+  display: block;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: 0.3em;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rte-content li[data-task='true'] > label input {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.rte-content li[data-task='true'] > div {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rte-content li[data-task='true'] > ul {
+  grid-column: 1 / -1;
+}
+
 .rte-content li[data-task='true']::before {
   position: static;
   grid-column: 1;
@@ -2959,6 +2987,44 @@ p {
   color: var(--muted);
   font-size: 10.5px;
   line-height: 1.5;
+}
+
+.collab-share {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised, var(--bg));
+}
+
+.collab-share strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.collab-share p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.collab-caption {
+  margin: -10px 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.collab-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--muted);
 }
 
 /* ---------- Página de importação ---------------------------- */

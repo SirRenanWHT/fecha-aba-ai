@@ -40,6 +40,17 @@ if not exist "dist\index.html" (
   )
 )
 
+findstr /C:/fecha-aba-ai/assets/ dist\index.html >nul 2>nul
+if not errorlevel 1 (
+  echo Ajustando o build do GitHub Pages para abrir localmente...
+  "%NODE_CMD%" node_modules\vite\bin\vite.js build
+  if errorlevel 1 (
+    echo Nao foi possivel gerar o build local.
+    pause
+    exit /b 1
+  )
+)
+
 echo.
 echo Caderno disponivel em http://127.0.0.1:4173
 echo Feche esta janela para parar o servidor.

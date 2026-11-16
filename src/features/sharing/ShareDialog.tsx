@@ -8,7 +8,7 @@ import { useNotes } from '@/hooks/useStores'
 import { FONT_LABELS } from '@/lib/model/note'
 import { buildShareLink, encodeSharePayload } from '@/lib/share/codec'
 import { downloadBlob, noteFilename } from '@/lib/share/download'
-import { buildNotePayload } from '@/lib/share/transfer'
+import { buildNotePayload, buildNoteTransfer } from '@/lib/share/transfer'
 import { MAX_SHARE_LINK_LENGTH, type NotePayload } from '@/lib/share/types'
 import { formatBytes } from '@/lib/utils/date'
 
@@ -17,7 +17,6 @@ type ShareDialogProps = {
   noteId: string | null
   onClose: () => void
 }
-
 type BuildStatus = 'idle' | 'building' | 'ready' | 'error'
 
 export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
@@ -30,6 +29,9 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
   const [link, setLink] = useState<string | null>(null)
   const [payload, setPayload] = useState<NotePayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [collabLink, setCollabLink] = useState<string | null>(null)
+  const [collabStatus, setCollabStatus] = useState<'idle' | 'creating' | 'error'>('idle')
+  const [collabError, setCollabError] = useState<string | null>(null)
   const linkInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -40,6 +42,9 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
     setLink(null)
     setPayload(null)
     setError(null)
+    setCollabLink(null)
+    setCollabStatus('idle')
+    setCollabError(null)
 
     buildNotePayload(note)
       .then(async (built) => {
@@ -96,6 +101,34 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
       input.select()
       document.execCommand('copy')
       notify('Link copiado')
+    }
+  }
+
+  async function createCollabLink(): Promise<void> {
+    if (!note || collabStatus === 'creating') return
+    setCollabStatus('creating')
+    setCollabError(null)
+    try {
+      const transfer = await buildNoteTransfer(note)
+      const { createCollaborativeInvite } = await import('@/lib/collaboration/notes')
+      const token = await createCollaborativeInvite(transfer)
+      const base = new URL(import.meta.env.BASE_URL, window.location.origin).href
+      setCollabLink(`${base}#/colaborar/${token}`)
+      setCollabStatus('idle')
+    } catch (createError) {
+      console.error(createError)
+      setCollabStatus('error')
+      setCollabError('Não foi possível criar o convite. Confira a configuração do Supabase.')
+    }
+  }
+
+  async function copyCollabLink(): Promise<void> {
+    if (!collabLink) return
+    try {
+      await navigator.clipboard.writeText(collabLink)
+      notify('Link de colaboração copiado')
+    } catch {
+      notify('Não foi possível copiar o link')
     }
   }
 
@@ -226,6 +259,24 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
               ) : null}
             </div>
 
+            <section className="collab-share">
+              <div>
+                <strong>Editar em conjunto</strong>
+                <p>Quem tiver o convite poderá editar título e conteúdo em tempo real.</p>
+              </div>
+              {collabLink ? (
+                <>
+                  <input className="share-link-input" readOnly value={collabLink} onFocus={(event) => event.target.select()} aria-label="Link para edição colaborativa" />
+                  <Button variant="primary" icon="copy" onClick={() => void copyCollabLink()}>Copiar convite</Button>
+                </>
+              ) : (
+                <Button variant="secondary" icon="share" onClick={() => void createCollabLink()} disabled={collabStatus === 'creating'}>
+                  {collabStatus === 'creating' ? 'Criando convite…' : 'Criar convite de colaboração'}
+                </Button>
+              )}
+              {collabError ? <p className="share-error">{collabError}</p> : null}
+            </section>
+
             <div className="share-file-row">
               {tooLong ? null : (
                 <Button variant="ghost" icon="download" size="sm" onClick={downloadFile}>
@@ -239,7 +290,7 @@ export function ShareDialog({ open, noteId, onClose }: ShareDialogProps) {
           </>
         )}
 
-        <p className="share-foot">Nada é enviado para servidores. O conteúdo viaja no link ou no arquivo.</p>
+        <p className="share-foot">O link comum contém uma cópia. O convite colaborativo guarda a nota no Supabase para sincronizar as edições.</p>
       </div>
     </div>
   )

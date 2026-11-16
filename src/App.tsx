@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AppShell } from '@/app/AppShell'
 import { VersionUpdateNotice } from '@/app/VersionUpdateNotice'
@@ -10,8 +10,10 @@ import { NoteEditorPage } from '@/features/notes/NoteEditorPage'
 import { NotesPage } from '@/features/notes/NotesPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { ImportPage } from '@/features/sharing/ImportPage'
+const CollaborativeNotePage = lazy(() => import('@/features/notes/CollaborativeNotePage').then((module) => ({ default: module.CollaborativeNotePage })))
 import { useSettings } from '@/hooks/useStores'
 import { applyTheme } from '@/lib/storage/settingsStore'
+import { getCollaborativeTokenForNote } from '@/lib/collaboration/links'
 
 function ThemeWatcher() {
   const { theme } = useSettings()
@@ -33,6 +35,8 @@ function ThemeWatcher() {
 
 function EditorRoute() {
   const { id = 'nova' } = useParams()
+  const collabToken = id === 'nova' ? undefined : getCollaborativeTokenForNote(id)
+  if (collabToken) return <Navigate to={`/colaborar/${collabToken}`} replace />
   return <NoteEditorPage noteId={id} />
 }
 
@@ -64,6 +68,14 @@ export function App() {
             <Route path="ajustes" element={<SettingsPage />} />
           </Route>
           <Route path="nota/:id" element={<EditorRoute />} />
+          <Route
+            path="colaborar/:token"
+            element={
+              <Suspense fallback={<div className="collab-message">Carregando editor colaborativo…</div>}>
+                <CollaborativeNotePage />
+              </Suspense>
+            }
+          />
           <Route path="atividade/:id" element={<ActivityEditorRoute />} />
           <Route path="importar" element={<ImportPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
