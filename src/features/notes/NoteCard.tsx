@@ -5,6 +5,7 @@ import { useCoverUrl } from '@/hooks/useCoverUrl'
 import { FONT_STACKS, type Note } from '@/lib/model/note'
 import { cn } from '@/lib/utils/cn'
 import { withAlpha } from '@/lib/utils/color'
+import { coverTransform } from '@/lib/utils/cover'
 import { formatDateTime, formatRelative } from '@/lib/utils/date'
 import { htmlToText } from '@/lib/utils/html'
 
@@ -61,7 +62,17 @@ export function NoteCard({ note, onTogglePin }: NoteCardProps) {
     >
       <div className={cn('card-cover', coverUrl && 'has-image')}>
         {coverUrl ? (
-          <img className="card-cover-img" src={coverUrl} alt="" loading="lazy" draggable={false} />
+          <img
+            className="card-cover-img"
+            src={coverUrl}
+            alt=""
+            loading="lazy"
+            draggable={false}
+            style={{
+              objectPosition: `${note.coverPositionX}% ${note.coverPositionY}%`,
+              transform: coverTransform(note.coverPositionX, note.coverPositionY, note.coverZoom),
+            }}
+          />
         ) : (
           <>
             <span className="card-initial" aria-hidden="true">

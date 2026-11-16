@@ -58,7 +58,8 @@ pnpm dev
   (automático, claro, escuro, papel). O tema da nota vale para o card **e** para a
   folha do editor — a moldura do app continua com o tema do Caderno.
 - **Imagem de capa**: escolher da galeria ou tirar foto; redimensionada para até
-  1600 px e comprimida em WebP (~380 KB) no IndexedDB. O `localStorage` guarda só o id.
+  1600 px e comprimida em WebP (~380 KB) no IndexedDB. O enquadramento, a posição e o zoom
+  podem ser ajustados na prévia do card; o `localStorage` guarda só o id e esses ajustes.
 - **Organização**: busca por título/conteúdo/tags (atalho `/`), filtro por tags
   combináveis, abas Todas / Fixadas / Arquivadas, tags e data relativa.
 - **Fluxo**: salvamento automático, excluir com desfazer, fixar e arquivar.

@@ -49,6 +49,9 @@ export type NoteDraft = Partial<
     | 'accentColor'
     | 'cardTheme'
     | 'coverImageId'
+    | 'coverPositionX'
+    | 'coverPositionY'
+    | 'coverZoom'
     | 'pinned'
     | 'archived'
   >

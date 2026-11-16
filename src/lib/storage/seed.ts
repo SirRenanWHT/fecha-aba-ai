@@ -5,6 +5,12 @@ function hoursAgo(hours: number): string {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
 }
 
+const DEFAULT_COVER_CROP = {
+  coverPositionX: 50,
+  coverPositionY: 50,
+  coverZoom: 100,
+}
+
 /**
  * Conteúdo de exemplo criado apenas na primeira abertura do app.
  * Serve para apresentar a interface e dar algo concreto para editar.
@@ -12,6 +18,7 @@ function hoursAgo(hours: number): string {
 export function createSeedNotes(): Note[] {
   return [
     {
+      ...DEFAULT_COVER_CROP,
       id: 'seed-bem-vindo',
       title: 'Bem-vindo ao Caderno',
       content: plainTextToHtml(
@@ -32,6 +39,7 @@ export function createSeedNotes(): Note[] {
       updatedAt: hoursAgo(2),
     },
     {
+      ...DEFAULT_COVER_CROP,
       id: 'seed-ideias',
       title: 'Ideias para o app',
       content: plainTextToHtml(
@@ -51,6 +59,7 @@ export function createSeedNotes(): Note[] {
       updatedAt: hoursAgo(20),
     },
     {
+      ...DEFAULT_COVER_CROP,
       id: 'seed-compras',
       title: 'Lista de compras do mês',
       content: plainTextToHtml(
@@ -75,6 +84,7 @@ export function createSeedNotes(): Note[] {
       updatedAt: hoursAgo(48),
     },
     {
+      ...DEFAULT_COVER_CROP,
       id: 'seed-trecho',
       title: 'Trecho que quero lembrar',
       content: plainTextToHtml(

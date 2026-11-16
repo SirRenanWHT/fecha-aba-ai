@@ -11,6 +11,7 @@ import { importNoteTransfer } from '@/lib/share/transfer'
 import { sharePayloadSchema, type NotePayload } from '@/lib/share/types'
 import { cn } from '@/lib/utils/cn'
 import { sanitizeNoteHtml } from '@/lib/utils/html'
+import { coverTransform } from '@/lib/utils/cover'
 
 type ImportState =
   | { status: 'loading' }
@@ -162,7 +163,18 @@ export function ImportPage() {
             >
               {cover ? (
                 <div className="import-cover">
-                  <img src={cover} alt="Capa da nota" />
+                  <img
+                    src={cover}
+                    alt="Capa da nota"
+                    style={{
+                      objectPosition: `${preview.coverPositionX}% ${preview.coverPositionY}%`,
+                      transform: coverTransform(
+                        preview.coverPositionX,
+                        preview.coverPositionY,
+                        preview.coverZoom,
+                      ),
+                    }}
+                  />
                 </div>
               ) : null}
               <div className="import-card-body">

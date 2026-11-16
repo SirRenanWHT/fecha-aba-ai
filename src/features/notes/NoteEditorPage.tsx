@@ -12,6 +12,7 @@ import { createCoverImage } from '@/lib/storage/imageStore'
 import { notesStore } from '@/lib/storage/notesStore'
 import { cn } from '@/lib/utils/cn'
 import { formatDateTime, formatTime } from '@/lib/utils/date'
+import { coverTransform } from '@/lib/utils/cover'
 import { htmlToText, normalizeNoteHtml } from '@/lib/utils/html'
 import { ShareDialog } from '@/features/sharing/ShareDialog'
 import { RichTextEditor } from './RichTextEditor'
@@ -29,6 +30,9 @@ type Draft = {
   accentColor: string
   cardTheme: CardTheme
   coverImageId?: string
+  coverPositionX: number
+  coverPositionY: number
+  coverZoom: number
 }
 
 const MAX_TAGS = 20
@@ -42,6 +46,9 @@ function toDraft(note?: Note): Draft {
     accentColor: note?.accentColor ?? '#b0492b',
     cardTheme: note?.cardTheme ?? 'auto',
     coverImageId: note?.coverImageId,
+    coverPositionX: note?.coverPositionX ?? 50,
+    coverPositionY: note?.coverPositionY ?? 50,
+    coverZoom: note?.coverZoom ?? 100,
   }
 }
 
@@ -95,6 +102,9 @@ export function NoteEditorPage({ noteId }: NoteEditorPageProps) {
         accentColor: value.accentColor,
         cardTheme: value.cardTheme,
         coverImageId: value.coverImageId,
+        coverPositionX: value.coverPositionX,
+        coverPositionY: value.coverPositionY,
+        coverZoom: value.coverZoom,
         pinned,
       }
 
@@ -255,8 +265,9 @@ export function NoteEditorPage({ noteId }: NoteEditorPageProps) {
     try {
       const previous = draftRef.current.coverImageId
       const image = await createCoverImage(file)
-      updateDraft({ coverImageId: image.id })
-      const id = persist(true, { coverImageId: image.id })
+      const crop = { coverPositionX: 50, coverPositionY: 50, coverZoom: 100 }
+      updateDraft({ coverImageId: image.id, ...crop })
+      const id = persist(true, { coverImageId: image.id, ...crop })
       if (id) {
         setStatus('saved')
         setSavedAt(new Date())
@@ -352,7 +363,18 @@ export function NoteEditorPage({ noteId }: NoteEditorPageProps) {
       >
         {coverUrl ? (
           <div className="editor-cover">
-            <img src={coverUrl} alt="Capa da nota" />
+            <img
+              src={coverUrl}
+              alt="Capa da nota"
+              style={{
+                objectPosition: `${draft.coverPositionX}% ${draft.coverPositionY}%`,
+                transform: coverTransform(
+                  draft.coverPositionX,
+                  draft.coverPositionY,
+                  draft.coverZoom,
+                ),
+              }}
+            />
             <button
               type="button"
               className="editor-cover-edit"
@@ -440,10 +462,17 @@ export function NoteEditorPage({ noteId }: NoteEditorPageProps) {
         accentColor={draft.accentColor}
         cardTheme={draft.cardTheme}
         coverUrl={coverUrl}
+        coverPositionX={draft.coverPositionX}
+        coverPositionY={draft.coverPositionY}
+        coverZoom={draft.coverZoom}
         uploadingCover={uploadingCover}
         onChangeFont={(fontFamily) => updateDraft({ fontFamily })}
         onChangeAccent={(accentColor) => updateDraft({ accentColor })}
         onChangeTheme={(cardTheme) => updateDraft({ cardTheme })}
+        onChangeCoverPosition={(coverPositionX, coverPositionY) =>
+          updateDraft({ coverPositionX, coverPositionY })
+        }
+        onChangeCoverZoom={(coverZoom) => updateDraft({ coverZoom })}
         onPickCover={(file) => {
           void handlePickCover(file)
         }}

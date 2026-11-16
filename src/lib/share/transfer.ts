@@ -121,6 +121,9 @@ export async function importNoteTransfer(
     accentColor: transfer.note.accentColor,
     cardTheme: transfer.note.cardTheme,
     coverImageId,
+    coverPositionX: transfer.note.coverPositionX,
+    coverPositionY: transfer.note.coverPositionY,
+    coverZoom: transfer.note.coverZoom,
     pinned: transfer.note.pinned,
     archived: options?.preserveArchived ? transfer.note.archived : false,
   })

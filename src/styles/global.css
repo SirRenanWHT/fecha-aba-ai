@@ -2580,7 +2580,7 @@ p {
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  height: 150px;
   margin-bottom: 12px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -2588,11 +2588,61 @@ p {
   background: var(--surface-2);
 }
 
+.cover-preview-box.is-adjustable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.cover-preview-box.is-adjustable:active {
+  cursor: grabbing;
+}
+
 .cover-preview {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cover-preview-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(20, 16, 12, 0.58);
+  color: #fff;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.cover-adjustments {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 14px;
+}
+
+.cover-range-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.cover-range-row input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.cover-range-row output {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .cover-empty {

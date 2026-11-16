@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Button, IconButton } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import {
@@ -14,6 +14,7 @@ import {
   type FontFamily,
 } from '@/lib/model/note'
 import { cn } from '@/lib/utils/cn'
+import { coverTransform } from '@/lib/utils/cover'
 
 type StylePanelProps = {
   open: boolean
@@ -22,10 +23,15 @@ type StylePanelProps = {
   accentColor: string
   cardTheme: CardTheme
   coverUrl: string | null
+  coverPositionX: number
+  coverPositionY: number
+  coverZoom: number
   uploadingCover: boolean
   onChangeFont: (font: FontFamily) => void
   onChangeAccent: (color: string) => void
   onChangeTheme: (theme: CardTheme) => void
+  onChangeCoverPosition: (x: number, y: number) => void
+  onChangeCoverZoom: (zoom: number) => void
   onPickCover: (file: File) => void
   onRemoveCover: () => void
 }
@@ -39,15 +45,29 @@ export function StylePanel({
   accentColor,
   cardTheme,
   coverUrl,
+  coverPositionX,
+  coverPositionY,
+  coverZoom,
   uploadingCover,
   onChangeFont,
   onChangeAccent,
   onChangeTheme,
+  onChangeCoverPosition,
+  onChangeCoverZoom,
   onPickCover,
   onRemoveCover,
 }: StylePanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const dragRef = useRef<{
+    pointerId: number
+    x: number
+    y: number
+    positionX: number
+    positionY: number
+    width: number
+    height: number
+  } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -69,6 +89,34 @@ export function StylePanel({
     const file = event.target.files?.[0]
     event.target.value = ''
     if (file) onPickCover(file)
+  }
+
+  function handlePreviewPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (!coverUrl) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      positionX: coverPositionX,
+      positionY: coverPositionY,
+      width: event.currentTarget.clientWidth,
+      height: event.currentTarget.clientHeight,
+    }
+  }
+
+  function handlePreviewPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const zoomFactor = 100 / coverZoom
+    const x = Math.round(drag.positionX - ((event.clientX - drag.x) / drag.width) * 100 * zoomFactor)
+    const y = Math.round(drag.positionY - ((event.clientY - drag.y) / drag.height) * 100 * zoomFactor)
+    onChangeCoverPosition(Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)))
+  }
+
+  function handlePreviewPointerUp(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null
   }
 
   return (
@@ -170,9 +218,24 @@ export function StylePanel({
 
         <section className="style-group">
           <h3 className="style-label">Imagem de capa</h3>
-          <div className="cover-preview-box">
+          <div
+            className={cn('cover-preview-box', coverUrl && 'is-adjustable')}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerUp}
+            onPointerCancel={handlePreviewPointerUp}
+          >
             {coverUrl ? (
-              <img className="cover-preview" src={coverUrl} alt="Capa atual da nota" />
+              <img
+                className="cover-preview"
+                src={coverUrl}
+                alt="Prévia do enquadramento da capa no card"
+                draggable={false}
+                style={{
+                  objectPosition: `${coverPositionX}% ${coverPositionY}%`,
+                  transform: coverTransform(coverPositionX, coverPositionY, coverZoom),
+                }}
+              />
             ) : (
               <div className="cover-empty">
                 <Icon name="image" size={22} />
@@ -180,7 +243,65 @@ export function StylePanel({
               </div>
             )}
             {uploadingCover ? <div className="cover-loading">Processando imagem…</div> : null}
+            {coverUrl && !uploadingCover ? (
+              <span className="cover-preview-hint">Arraste para ajustar</span>
+            ) : null}
           </div>
+
+          {coverUrl ? (
+            <div className="cover-adjustments">
+              <label className="cover-range-row">
+                <span>Zoom</span>
+                <input
+                  type="range"
+                  min="100"
+                  max="200"
+                  step="1"
+                  value={coverZoom}
+                  aria-label="Zoom da capa"
+                  onChange={(event) => onChangeCoverZoom(Number(event.target.value))}
+                />
+                <output>{coverZoom}%</output>
+              </label>
+              <label className="cover-range-row">
+                <span>Horizontal</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={coverPositionX}
+                  aria-label="Posição horizontal da capa"
+                  onChange={(event) => onChangeCoverPosition(Number(event.target.value), coverPositionY)}
+                />
+                <output>{coverPositionX}%</output>
+              </label>
+              <label className="cover-range-row">
+                <span>Vertical</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={coverPositionY}
+                  aria-label="Posição vertical da capa"
+                  onChange={(event) => onChangeCoverPosition(coverPositionX, Number(event.target.value))}
+                />
+                <output>{coverPositionY}%</output>
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={coverZoom === 100 && coverPositionX === 50 && coverPositionY === 50}
+                onClick={() => {
+                  onChangeCoverPosition(50, 50)
+                  onChangeCoverZoom(100)
+                }}
+              >
+                Centralizar enquadramento
+              </Button>
+            </div>
+          ) : null}
 
           <div className="cover-actions">
             <Button

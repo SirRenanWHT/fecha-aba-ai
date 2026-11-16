@@ -11,6 +11,9 @@ export const noteSchema = z.object({
   title: z.string().max(200),
   content: z.string(),
   coverImageId: z.string().optional(),
+  coverPositionX: z.number().min(0).max(100).default(50),
+  coverPositionY: z.number().min(0).max(100).default(50),
+  coverZoom: z.number().min(100).max(200).default(100),
   fontFamily: z.enum(FONT_FAMILIES).default('inter'),
   accentColor: z
     .string()
