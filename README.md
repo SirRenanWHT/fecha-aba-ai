@@ -80,6 +80,8 @@ pnpm dev
   troca de etapa pelo seletor do card.
 - **Exportar/importar atividades**: arquivo `.json` próprio, com cópias na importação.
 - **Backup**: as atividades entram no backup completo ao lado das notas e imagens.
+- **Colaboração**: atividades podem ser compartilhadas por convite e editadas em tempo real,
+  incluindo status, progresso e subtarefas.
 
 ### Compartilhar e backup
 
@@ -101,11 +103,13 @@ pnpm dev
 ### Configurar colaboração no Supabase
 
 1. No projeto Supabase, abra **SQL Editor → New query**.
-2. Cole e execute o conteúdo de `supabase/collaboration.sql`.
-3. Acesse uma nota, escolha **Compartilhar** e clique em **Criar convite de colaboração**.
-4. Envie o link para a outra pessoa. Ela abre o link no app e entra na mesma nota.
+2. Se ainda não tiver feito, cole e execute `supabase/collaboration.sql`.
+3. Cole e execute `supabase/shared-activities.sql` para habilitar atividades.
+4. Acesse uma nota e escolha **Compartilhar** para criar um convite colaborativo, ou abra
+   uma atividade e use **Criar convite de colaboração**.
+5. Envie o link para a outra pessoa. Ela abre o link no app e entra na mesma nota ou atividade.
 
-As tabelas guardam apenas notas que receberam um convite. O script habilita RLS e
+As tabelas guardam apenas notas e atividades que receberam um convite. Os scripts habilitam RLS e
 restringe a leitura, escrita e canais Realtime aos participantes adicionados pelo convite.
 O hCaptcha usa a Sitekey pública configurada no app; no painel do hCaptcha, permita o
 hostname `sirrenanwht.github.io` para o site publicado. Para desenvolvimento local, o
@@ -116,7 +120,7 @@ apontado para `127.0.0.1` e inclua esse hostname na allowlist do sitekey.
 
 - **Tema**: claro (papel), escuro e sistema — aplicado na hora e lembrado.
 - **Persistência**: `localStorage` versionado (`ndb:v2:*`), validado com Zod. As notas
-  comuns continuam locais; somente notas compartilhadas por convite usam o Supabase.
+  comuns continuam locais; notas e atividades compartilhadas por convite usam o Supabase.
   As notas da Fase 1 (`ndb:v1:*`, texto puro) são convertidas para HTML na primeira
   abertura e a chave antiga é removida.
 - **Responsivo**: sidebar no desktop, navegação inferior + botão flutuante no celular.
@@ -189,8 +193,32 @@ O convite funciona como uma chave de acesso: compartilhe-o apenas com quem deve 
 
 - Publicar no GitHub Pages para instalar no celular sem depender do PC.
 - Sincronização geral entre aparelhos para notas que não foram compartilhadas.
-- Notificações de prazo em segundo plano quando o app está fechado (exigem serviço push).
-- Compartilhar atividades individuais por link, como já acontece com as notas.
+- Sincronização geral entre aparelhos para atividades e notas não compartilhadas.
+
+### Notificações push de atividades compartilhadas
+
+O fluxo de envio usa a Edge Function `send-deadline-push` e o agendador do Supabase. Primeiro,
+execute `shared-activity-push.sql` no SQL Editor para criar a tabela de deduplicação. Depois:
+
+1. Gere um par VAPID no computador com `node scripts/generate-vapid.mjs`. Cadastre
+   `VITE_VAPID_PUBLIC_KEY` como variável do repositório GitHub em **Settings → Secrets and
+   variables → Actions → Variables**. No Supabase, em **Edge Functions → Secrets**, cadastre
+   `VAPID_PRIVATE_KEY_JSON` com o valor privado JSON exibido pelo gerador.
+2. Gere uma chave de agendamento com `node scripts/generate-cron-secret.mjs` e cadastre-a como
+   `DEADLINE_PUSH_CRON_SECRET` nos secrets da Edge Function.
+3. Instale a Supabase CLI, faça login e publique com
+   `supabase functions deploy send-deadline-push --project-ref rcmssdqsbbxpjgumblfb`.
+   A função valida a chave privada de agendamento mesmo com a verificação JWT desativada.
+4. No arquivo `schedule-deadline-push.sql`, substitua `PREENCHA_COM_A_MESMA_CHAVE` pela chave
+   gerada e execute o arquivo uma única vez no SQL Editor. Ele ativa o agendamento a cada 15 min.
+5. Faça um novo deploy do GitHub Pages para incluir a chave pública no app. Em cada aparelho,
+   abra **Ajustes → Lembretes de prazo** e ative as notificações. Se os lembretes locais já
+   estavam ativados antes de configurar o push, desative e ative novamente para registrar o
+   aparelho no serviço push.
+
+O agendamento verifica os prazos a cada 15 minutos, respeita o fuso horário salvo em cada
+dispositivo, envia alertas no dia anterior e no dia do vencimento, e remove inscrições inválidas.
+O envio em segundo plano se aplica às atividades compartilhadas armazenadas no Supabase.
 
 ## Decisões de produto
 

@@ -39,6 +39,8 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Build para o Pages
+        env:
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
         run: pnpm exec vite build --base=/fecha-aba-ai/
 
       - name: Configurar Pages

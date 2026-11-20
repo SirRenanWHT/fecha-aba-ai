@@ -6,6 +6,21 @@ const PRECACHE = __PRECACHE__
 const CACHE_NAME = `caderno-${VERSION}`
 const INDEX_URL = `${BASE}index.html`
 
+self.addEventListener('push', (event) => {
+  let payload = {}
+  try {
+    payload = event.data?.json() ?? {}
+  } catch {
+    payload = { body: event.data?.text() ?? '' }
+  }
+  event.waitUntil(self.registration.showNotification(payload.title || 'Lembrete do Caderno', {
+    body: payload.body || 'Uma atividade compartilhada está perto do vencimento.',
+    icon: `${BASE}icons/icon-192.png`,
+    tag: payload.tag || 'shared-activity-reminder',
+    data: { url: payload.url || '#/atividades' },
+  }))
+})
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
@@ -34,9 +49,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
+  const route = event.notification.data?.url
   const activityId = event.notification.data?.activityId
-  if (!activityId) return
-  const targetUrl = `${self.location.origin}${BASE}#/atividade/${encodeURIComponent(activityId)}`
+  if (!route && !activityId) return
+  const targetUrl = route
+    ? `${self.location.origin}${BASE}${route.startsWith('#') ? route : `#${route}`}`
+    : `${self.location.origin}${BASE}#/atividade/${encodeURIComponent(activityId)}`
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })

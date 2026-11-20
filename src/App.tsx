@@ -5,12 +5,14 @@ import { VersionUpdateNotice } from '@/app/VersionUpdateNotice'
 import { ToastProvider } from '@/components/Toast'
 import { ActivitiesPage } from '@/features/activities/ActivitiesPage'
 import { DeadlineNotifications } from '@/features/activities/DeadlineNotifications'
-import { ActivityEditorPage } from '@/features/activities/ActivityEditorPage'
 import { NoteEditorPage } from '@/features/notes/NoteEditorPage'
 import { NotesPage } from '@/features/notes/NotesPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { ImportPage } from '@/features/sharing/ImportPage'
 const CollaborativeNotePage = lazy(() => import('@/features/notes/CollaborativeNotePage').then((module) => ({ default: module.CollaborativeNotePage })))
+const ActivityEditorPage = lazy(() => import('@/features/activities/ActivityEditorPage').then((module) => ({ default: module.ActivityEditorPage })))
+const CollaborativeActivityInvitePage = lazy(() => import('@/features/activities/CollaborativeActivityInvitePage').then((module) => ({ default: module.CollaborativeActivityInvitePage })))
+import { getCollaborativeActivityToken } from '@/lib/collaboration/activity-links'
 import { useSettings } from '@/hooks/useStores'
 import { applyTheme } from '@/lib/storage/settingsStore'
 import { getCollaborativeTokenForNote } from '@/lib/collaboration/links'
@@ -42,7 +44,11 @@ function EditorRoute() {
 
 function ActivityEditorRoute() {
   const { id = 'nova' } = useParams()
-  return <ActivityEditorPage activityId={id} />
+  const { search } = useLocation()
+  const room = new URLSearchParams(search).get('room') ?? undefined
+  const inviteToken = id === 'nova' || room ? undefined : getCollaborativeActivityToken(id)
+  if (inviteToken) return <Navigate to={`/atividade-colaborar/${inviteToken}`} replace />
+  return <Suspense fallback={<div className="collab-message">Carregando atividade…</div>}><ActivityEditorPage activityId={id} collaborationRoom={room} /></Suspense>
 }
 
 function ScrollToTop() {
@@ -77,6 +83,7 @@ export function App() {
             }
           />
           <Route path="atividade/:id" element={<ActivityEditorRoute />} />
+          <Route path="atividade-colaborar/:token" element={<Suspense fallback={<div className="collab-message">Carregando atividade compartilhada…</div>}><CollaborativeActivityInvitePage /></Suspense>} />
           <Route path="importar" element={<ImportPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "serve": "node scripts/serve.mjs",
     "check": "tsc --noEmit",
+    "generate:vapid": "node scripts/generate-vapid.mjs",
+    "generate:cron-secret": "node scripts/generate-cron-secret.mjs",
     "e2e": "node scripts/e2e.mjs",
     "e2e:f3": "node scripts/e2e-f3.mjs",
     "e2e:theme": "node scripts/e2e-theme.mjs",

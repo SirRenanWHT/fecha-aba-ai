@@ -1,0 +1,4 @@
+project_id = "rcmssdqsbbxpjgumblfb"
+
+[functions.send-deadline-push]
+verify_jwt = false

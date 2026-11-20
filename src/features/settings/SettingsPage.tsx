@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -23,6 +23,8 @@ import { clearAllData, storageUsageBytes } from '@/lib/storage/storage'
 import { settingsStore, type ThemePreference } from '@/lib/storage/settingsStore'
 import { cn } from '@/lib/utils/cn'
 import { formatBytes } from '@/lib/utils/date'
+
+const HCaptchaChallenge = lazy(() => import('@/components/HCaptchaChallenge').then((module) => ({ default: module.HCaptchaChallenge })))
 
 const THEME_CARDS: Array<{
   value: ThemePreference
@@ -52,6 +54,10 @@ export function SettingsPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
     'Notification' in window ? Notification.permission : 'unsupported',
   )
+  const [pushCaptchaVisible, setPushCaptchaVisible] = useState(false)
+  const [pushCaptchaResetKey, setPushCaptchaResetKey] = useState(0)
+  const [pushError, setPushError] = useState('')
+  const [pushBusy, setPushBusy] = useState(false)
   const backupInputRef = useRef<HTMLInputElement>(null)
   const usage = storageUsageBytes()
 
@@ -72,6 +78,12 @@ export function SettingsPage() {
   const archived = notes.filter((note) => note.archived).length
 
   async function handleReset(): Promise<void> {
+    try {
+      const { disableDeadlinePush } = await import('@/lib/collaboration/push')
+      await disableDeadlinePush()
+    } catch (error) {
+      console.error('Não foi possível remover a inscrição push', error)
+    }
     clearAllData()
     try {
       await clearImages()
@@ -170,7 +182,18 @@ export function SettingsPage() {
 
   async function handleDeadlineNotifications(): Promise<void> {
     if (settings.deadlineNotifications) {
+      setPushBusy(true)
+      try {
+        const { disableDeadlinePush } = await import('@/lib/collaboration/push')
+        await disableDeadlinePush()
+      } catch (error) {
+        console.error('Não foi possível remover a inscrição push', error)
+      } finally {
+        setPushBusy(false)
+      }
       settingsStore.setDeadlineNotifications(false)
+      setPushCaptchaVisible(false)
+      setPushError('')
       notify('Lembretes de prazo desativados')
       return
     }
@@ -181,10 +204,41 @@ export function SettingsPage() {
     const permission = await Notification.requestPermission()
     setNotificationPermission(permission)
     if (permission === 'granted') {
-      settingsStore.setDeadlineNotifications(true)
-      notify('Lembretes ativados para um dia antes e no dia do prazo')
+      setPushError('')
+      if (!import.meta.env.VITE_VAPID_PUBLIC_KEY) {
+        settingsStore.setDeadlineNotifications(true)
+        setPushError('Push em segundo plano ainda não está configurado. Os lembretes funcionarão com o app aberto.')
+        notify('Lembretes ativados para um dia antes e no dia do prazo')
+        return
+      }
+      await activatePush()
     } else if (permission === 'denied') {
       notify('Ative as notificações do Caderno nas permissões do navegador')
+    }
+  }
+
+  async function activatePush(captchaToken?: string): Promise<void> {
+    setPushBusy(true)
+    setPushError('')
+    try {
+      const { enableDeadlinePush } = await import('@/lib/collaboration/push')
+      await enableDeadlinePush(captchaToken)
+      setPushCaptchaVisible(false)
+      settingsStore.setDeadlineNotifications(true)
+      notify('Lembretes push ativados neste dispositivo')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível ativar o push.'
+      if (/captcha/i.test(message)) {
+        setPushCaptchaVisible(true)
+        setPushCaptchaResetKey((key) => key + (captchaToken ? 1 : 0))
+        setPushError(captchaToken ? 'A verificação falhou ou expirou. Faça o desafio novamente.' : 'Confirme que você é uma pessoa para ativar o push.')
+      } else {
+        setPushCaptchaVisible(false)
+        settingsStore.setDeadlineNotifications(true)
+        setPushError(`${message} Os lembretes locais continuam ativos enquanto o app estiver aberto.`)
+      }
+    } finally {
+      setPushBusy(false)
     }
   }
 
@@ -269,8 +323,8 @@ export function SettingsPage() {
         <div className="settings-card-head">
           <h2 className="settings-title">Lembretes de prazo</h2>
           <p className="settings-sub">
-            Receba uma notificação um dia antes e no dia do vencimento. O Caderno precisa estar
-            aberto para conferir os prazos.
+            Receba avisos um dia antes e no dia do vencimento. Com push configurado, atividades
+            compartilhadas também podem notificar este dispositivo com o app fechado.
           </p>
         </div>
         {notificationPermission === 'unsupported' ? (
@@ -285,10 +339,22 @@ export function SettingsPage() {
             variant={settings.deadlineNotifications ? 'secondary' : 'primary'}
             icon="bell"
             onClick={() => void handleDeadlineNotifications()}
+            disabled={pushBusy}
           >
-            {settings.deadlineNotifications ? 'Desativar lembretes' : 'Ativar notificações'}
+            {pushBusy ? 'Atualizando…' : settings.deadlineNotifications ? 'Desativar lembretes' : 'Ativar notificações'}
           </Button>
         )}
+        {pushCaptchaVisible ? (
+          <Suspense fallback={<p className="install-hint">Carregando verificação…</p>}>
+            <HCaptchaChallenge
+              resetKey={pushCaptchaResetKey}
+              onVerify={(token) => void activatePush(token)}
+              onExpire={() => setPushError('O desafio hCaptcha expirou. Faça a verificação novamente.')}
+              onError={setPushError}
+            />
+          </Suspense>
+        ) : null}
+        {pushError ? <p className="install-hint">{pushError}</p> : null}
       </section>
 
       <section className="settings-card">

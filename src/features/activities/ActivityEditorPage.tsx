@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import * as Y from 'yjs'
 import { nanoid } from 'nanoid'
 import { Button, IconButton } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
@@ -27,9 +28,14 @@ import {
 import { activitiesStore } from '@/lib/storage/activitiesStore'
 import { cn } from '@/lib/utils/cn'
 import { formatDateTime, formatTime } from '@/lib/utils/date'
+import { activitySchema } from '@/lib/model/activity'
+import { SupabaseYjsProvider } from '@/lib/collaboration/provider'
+import { saveCollaborativeActivity } from '@/lib/collaboration/activities'
+import { ActivityCollaborationActions } from './ActivityCollaborationActions'
 
 type ActivityEditorPageProps = {
   activityId: string
+  collaborationRoom?: string
 }
 
 type Draft = {
@@ -73,11 +79,21 @@ function normalizeDraft(draft: Draft): Draft {
   return toDraft(normalizeActivity(toActivity(draft)))
 }
 
+function changedDraftFields(from: Draft, to: Draft): Partial<Draft> {
+  const changes: Partial<Draft> = {}
+  for (const key of Object.keys(to) as Array<keyof Draft>) {
+    if (JSON.stringify(from[key]) !== JSON.stringify(to[key])) {
+      Object.assign(changes, { [key]: to[key] })
+    }
+  }
+  return changes
+}
+
 function hasMessageContent(draft: Draft): boolean {
   return Boolean(draft.title.trim() || draft.description.trim() || draft.subtasks.length > 0)
 }
 
-export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
+export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEditorPageProps) {
   const isNew = activityId === 'nova'
   const initial = isNew ? undefined : activitiesStore.getById(activityId)
 
@@ -94,11 +110,16 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
   const [subtaskInput, setSubtaskInput] = useState('')
 
   const persistedIdRef = useRef<string | null>(initial?.id ?? null)
+  const persistedDraftRef = useRef(toDraft(initial))
+  const sharedDraftRef = useRef(toDraft(initial))
   const dirtyRef = useRef(false)
   const firstRenderRef = useRef(true)
   const skipNextSaveRef = useRef(false)
   const draftRef = useRef(draft)
   const descriptionRef = useRef<HTMLTextAreaElement>(null)
+  const collaborationDocRef = useRef<Y.Doc | null>(null)
+  const skipCollaborationSaveRef = useRef(false)
+  const [collaborationStatus, setCollaborationStatus] = useState<'connecting' | 'connected' | 'error'>('connecting')
   draftRef.current = draft
 
   useDocumentTitle(draft.title.trim() || (isNew ? 'Nova atividade' : 'Atividade'))
@@ -113,7 +134,12 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
 
   const persist = useCallback(
     (navigateOnCreate: boolean, patch?: Partial<Draft>): string | null => {
-      const value = normalizeDraft({ ...draftRef.current, ...patch })
+      const current = draftRef.current
+      const changes = changedDraftFields(persistedDraftRef.current, current)
+      const latest = persistedIdRef.current
+        ? activitiesStore.getById(persistedIdRef.current)
+        : undefined
+      const value = normalizeDraft({ ...toDraft(latest), ...changes, ...patch })
       const payload = {
         title: value.title,
         description: value.description,
@@ -127,13 +153,15 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
       }
 
       if (persistedIdRef.current) {
-        activitiesStore.update(persistedIdRef.current, payload)
+        const updated = activitiesStore.update(persistedIdRef.current, payload)
+        if (updated) persistedDraftRef.current = toDraft(updated)
         return persistedIdRef.current
       }
       if (!hasMessageContent(value)) return null
 
       const created = activitiesStore.create(payload)
       persistedIdRef.current = created.id
+      persistedDraftRef.current = toDraft(created)
       if (navigateOnCreate) navigate(`/atividade/${created.id}`, { replace: true })
       return created.id
     },
@@ -153,6 +181,7 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
       return
     }
     persistedIdRef.current = activity.id
+    persistedDraftRef.current = toDraft(activity)
     skipNextSaveRef.current = true
     setDraft(toDraft(activity))
     setMissing(false)
@@ -198,6 +227,87 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
     element.style.height = 'auto'
     element.style.height = `${element.scrollHeight}px`
   }, [draft.description])
+
+  useEffect(() => {
+    if (!collaborationRoom || !initial) return
+    const doc = new Y.Doc()
+    const provider = new SupabaseYjsProvider(collaborationRoom, doc)
+    const shared = doc.getMap<unknown>('activity')
+    collaborationDocRef.current = doc
+
+    const applySharedActivity = () => {
+      if (shared.size === 0) return
+      const parsed = activitySchema.safeParse(Object.fromEntries(shared.entries()))
+      if (!parsed.success) return
+      const current = activitiesStore.getById(activityId)
+      if (!current) return
+      const updated = activitiesStore.update(activityId, {
+        ...parsed.data,
+        id: activityId,
+      })
+      if (!updated) return
+      const remoteDraft = toDraft(updated)
+      const pendingLocalChanges = changedDraftFields(persistedDraftRef.current, draftRef.current)
+      persistedDraftRef.current = remoteDraft
+      sharedDraftRef.current = remoteDraft
+      skipNextSaveRef.current = Object.keys(pendingLocalChanges).length === 0
+      skipCollaborationSaveRef.current = Object.keys(pendingLocalChanges).length === 0
+      setDraft({ ...remoteDraft, ...pendingLocalChanges })
+    }
+    shared.observe(applySharedActivity)
+
+    const stopStatus = provider.onStatus((next) => {
+      if (next === 'error') setCollaborationStatus('error')
+      else if (next === 'connected') {
+        setCollaborationStatus('connected')
+        if (shared.size === 0) {
+          const current = activitiesStore.getById(activityId)
+          if (current) doc.transact(() => {
+            for (const [key, value] of Object.entries(current)) shared.set(key, value)
+          })
+          if (current) sharedDraftRef.current = toDraft(current)
+        } else applySharedActivity()
+      } else setCollaborationStatus('connecting')
+    })
+
+    return () => {
+      stopStatus()
+      shared.unobserve(applySharedActivity)
+      collaborationDocRef.current = null
+      provider.destroy()
+      doc.destroy()
+    }
+  }, [activityId, collaborationRoom])
+
+  useEffect(() => {
+    if (!collaborationRoom || !initial) return
+    if (skipCollaborationSaveRef.current) {
+      skipCollaborationSaveRef.current = false
+      return
+    }
+    const changes = changedDraftFields(sharedDraftRef.current, draft)
+    if (Object.keys(changes).length === 0) return
+    const timer = window.setTimeout(() => {
+      const current = activitiesStore.getById(activityId)
+      const doc = collaborationDocRef.current
+      if (!current || !doc || collaborationStatus !== 'connected') return
+      const updated = activitiesStore.update(activityId, changes)
+      if (!updated) return
+      const shared = doc.getMap<unknown>('activity')
+      doc.transact(() => {
+        for (const [key, value] of Object.entries(updated)) {
+          if (JSON.stringify(shared.get(key)) !== JSON.stringify(value)) shared.set(key, value)
+        }
+      })
+      sharedDraftRef.current = toDraft(updated)
+      persistedDraftRef.current = toDraft(updated)
+      void saveCollaborativeActivity(collaborationRoom, updated).catch((error) => {
+        console.error('Não foi possível salvar a atividade compartilhada', error)
+        setCollaborationStatus('error')
+      })
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [activityId, collaborationRoom, collaborationStatus, draft])
 
   function updateDraft(patch: Partial<Draft>): void {
     setDraft((current) => normalizeDraft({ ...current, ...patch }))
@@ -318,6 +428,12 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
         </span>
 
         <div className="editor-bar-side editor-bar-actions">
+          {collaborationRoom ? (
+            <span className={cn('save-state', collaborationStatus === 'connected' ? '' : 'is-saving')}>
+              <Icon name={collaborationStatus === 'connected' ? 'check' : 'clock'} size={14} />
+              <span className="save-label">{collaborationStatus === 'connected' ? 'Em tempo real' : collaborationStatus === 'error' ? 'Sem conexão' : 'Conectando…'}</span>
+            </span>
+          ) : null}
           <IconButton icon="trash" label="Excluir atividade" tone="danger" onClick={handleDelete} />
         </div>
       </header>
@@ -344,6 +460,10 @@ export function ActivityEditorPage({ activityId }: ActivityEditorPageProps) {
           rows={1}
           onChange={(event) => updateDraft({ description: event.target.value })}
         />
+
+        {!isNew ? (
+          <ActivityCollaborationActions activity={activitiesStore.getById(activityId) ?? toActivity(draft)} />
+        ) : null}
 
         <section className="activity-panel">
           <div className="activity-panel-head">
