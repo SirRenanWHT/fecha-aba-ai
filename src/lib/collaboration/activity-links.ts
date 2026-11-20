@@ -24,3 +24,7 @@ export function saveCollaborativeActivityLink(room: string, activityId: string, 
 export function getLocalCollaborativeActivityId(room: string): string | undefined {
   return readMap(ROOM_MAP_KEY)[room]
 }
+
+export function getCollaborativeActivityRoom(activityId: string): string | undefined {
+  return Object.entries(readMap(ROOM_MAP_KEY)).find(([, localId]) => localId === activityId)?.[0]
+}

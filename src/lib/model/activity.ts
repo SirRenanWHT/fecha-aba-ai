@@ -27,6 +27,13 @@ export const subtaskSchema = z.object({
 
 export type Subtask = z.infer<typeof subtaskSchema>
 
+export const monthlyRecurrenceSchema = z.object({
+  frequency: z.literal('monthly'),
+  dayOfMonth: z.number().int().min(1).max(31),
+  seriesId: z.string().min(1),
+})
+export type MonthlyRecurrence = z.infer<typeof monthlyRecurrenceSchema>
+
 export const activitySchema = z.object({
   id: z.string().min(1),
   title: z.string().max(200),
@@ -39,6 +46,7 @@ export const activitySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  recurrence: monthlyRecurrenceSchema.optional(),
   priority: z.enum(ACTIVITY_PRIORITIES).default('medium'),
   project: z.string().max(60).default(''),
   createdAt: z.string(),
@@ -175,6 +183,24 @@ export function todayDateInput(now = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+export function nextMonthlyDueDate(
+  dueDate: string,
+  recurrence: MonthlyRecurrence,
+  completedAt = new Date(),
+): string {
+  const base = todayDateInput(completedAt) > dueDate ? todayDateInput(completedAt) : dueDate
+  const [year, month] = base.split('-').map(Number)
+  const baseMonth = new Date(year, month - 1, 1)
+  const dayInMonth = (date: Date) =>
+    Math.min(recurrence.dayOfMonth, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate())
+  const candidate = new Date(baseMonth.getFullYear(), baseMonth.getMonth(), dayInMonth(baseMonth))
+  if (todayDateInput(candidate) <= base) {
+    candidate.setMonth(candidate.getMonth() + 1, 1)
+    candidate.setDate(dayInMonth(candidate))
+  }
+  return todayDateInput(candidate)
 }
 
 export function daysUntilDate(value: string): number {

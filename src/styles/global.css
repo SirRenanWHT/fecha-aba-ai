@@ -4509,6 +4509,28 @@ p {
   font-weight: 600;
 }
 
+.recurrence-field {
+  align-self: start;
+}
+
+.recurrence-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.recurrence-toggle input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  accent-color: var(--accent);
+}
+
 .priority-options {
   display: flex;
   gap: 6px;

@@ -12,7 +12,7 @@ import { ImportPage } from '@/features/sharing/ImportPage'
 const CollaborativeNotePage = lazy(() => import('@/features/notes/CollaborativeNotePage').then((module) => ({ default: module.CollaborativeNotePage })))
 const ActivityEditorPage = lazy(() => import('@/features/activities/ActivityEditorPage').then((module) => ({ default: module.ActivityEditorPage })))
 const CollaborativeActivityInvitePage = lazy(() => import('@/features/activities/CollaborativeActivityInvitePage').then((module) => ({ default: module.CollaborativeActivityInvitePage })))
-import { getCollaborativeActivityToken } from '@/lib/collaboration/activity-links'
+import { getCollaborativeActivityRoom, getCollaborativeActivityToken } from '@/lib/collaboration/activity-links'
 import { useSettings } from '@/hooks/useStores'
 import { applyTheme } from '@/lib/storage/settingsStore'
 import { getCollaborativeTokenForNote } from '@/lib/collaboration/links'
@@ -45,7 +45,7 @@ function EditorRoute() {
 function ActivityEditorRoute() {
   const { id = 'nova' } = useParams()
   const { search } = useLocation()
-  const room = new URLSearchParams(search).get('room') ?? undefined
+  const room = new URLSearchParams(search).get('room') ?? getCollaborativeActivityRoom(id)
   const inviteToken = id === 'nova' || room ? undefined : getCollaborativeActivityToken(id)
   if (inviteToken) return <Navigate to={`/atividade-colaborar/${inviteToken}`} replace />
   return <Suspense fallback={<div className="collab-message">Carregando atividade…</div>}><ActivityEditorPage activityId={id} collaborationRoom={room} /></Suspense>

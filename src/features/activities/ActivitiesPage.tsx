@@ -9,6 +9,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useActivities } from '@/hooks/useStores'
 import {
   ACTIVITY_STATUS_LABELS,
+  changeActivityStatus,
   isActivityOverdue,
   type Activity,
   type ActivityStatus,
@@ -17,6 +18,7 @@ import { activitiesFilename, downloadBlob } from '@/lib/share/download'
 import { buildActivitiesPayload, importActivitiesPayload } from '@/lib/share/transfer'
 import { sharePayloadSchema, type ActivitiesPayload } from '@/lib/share/types'
 import { activitiesStore } from '@/lib/storage/activitiesStore'
+import { getCollaborativeActivityRoom } from '@/lib/collaboration/activity-links'
 import { cn } from '@/lib/utils/cn'
 import { ActivityRow } from './ActivityRow'
 import { KanbanCard } from './KanbanCard'
@@ -67,6 +69,42 @@ export function ActivitiesPage() {
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
   const [pendingImport, setPendingImport] = useState<ActivitiesPayload | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    let stopRealtime: (() => void) | undefined
+    void Promise.all([
+      import('@/lib/collaboration/activities'),
+      import('@/lib/collaboration/supabase'),
+    ]).then(([collaboration, supabaseModule]) => {
+      if (cancelled) return
+      const { syncSharedActivityRooms } = collaboration
+      const { supabase } = supabaseModule
+      void syncSharedActivityRooms().catch((error) => {
+        console.warn('Não foi possível atualizar as atividades compartilhadas', error)
+      })
+      const channel = supabase.channel('shared-activities-index')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'collab_activities',
+        }, ({ new: row }) => {
+          const activity = row.activity as Partial<Activity> | undefined
+          if (activity?.status !== 'done' || !activity.recurrence) return
+          void syncSharedActivityRooms().catch((error) => {
+            console.warn('Não foi possível atualizar a próxima atividade recorrente', error)
+          })
+        })
+        .subscribe()
+      stopRealtime = () => { void supabase.removeChannel(channel) }
+    }).catch((error) => {
+      console.warn('Não foi possível iniciar a sincronização de atividades', error)
+    })
+    return () => {
+      cancelled = true
+      stopRealtime?.()
+    }
+  }, [])
 
   const counts = useMemo(
     () => ({
@@ -142,12 +180,35 @@ export function ActivitiesPage() {
     if (next === 'kanban') setFilter('all')
   }
 
+  function updateStatus(activity: Activity, status: ActivityStatus): void {
+    const room = getCollaborativeActivityRoom(activity.id)
+    if (!room) {
+      activitiesStore.changeStatus(activity.id, status)
+      return
+    }
+
+    const updated = activitiesStore.update(
+      activity.id,
+      changeActivityStatus(activity, status),
+      { generateRecurrence: false },
+    )
+    if (!updated) return
+    void import('@/lib/collaboration/activities').then(({ saveCollaborativeActivity }) =>
+      saveCollaborativeActivity(room, updated),
+    ).catch((error) => {
+      console.error('Não foi possível salvar a atividade compartilhada', error)
+      activitiesStore.update(activity.id, activity, { generateRecurrence: false })
+      notify('Não foi possível atualizar a atividade compartilhada')
+    })
+  }
+
   function handleToggleDone(activity: Activity): void {
-    activitiesStore.changeStatus(activity.id, activity.status === 'done' ? 'doing' : 'done')
+    updateStatus(activity, activity.status === 'done' ? 'doing' : 'done')
   }
 
   function handleMove(id: string, status: ActivityStatus): void {
-    activitiesStore.changeStatus(id, status)
+    const activity = activitiesStore.getById(id)
+    if (activity) updateStatus(activity, status)
     window.requestAnimationFrame(() => {
       const board = kanbanRef.current
       const column = board?.querySelector<HTMLElement>(`[data-status="${status}"]`)

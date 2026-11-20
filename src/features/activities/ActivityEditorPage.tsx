@@ -30,7 +30,8 @@ import { cn } from '@/lib/utils/cn'
 import { formatDateTime, formatTime } from '@/lib/utils/date'
 import { activitySchema } from '@/lib/model/activity'
 import { SupabaseYjsProvider } from '@/lib/collaboration/provider'
-import { saveCollaborativeActivity } from '@/lib/collaboration/activities'
+import { saveCollaborativeActivity, syncSharedActivityRooms } from '@/lib/collaboration/activities'
+import { supabase } from '@/lib/collaboration/supabase'
 import { ActivityCollaborationActions } from './ActivityCollaborationActions'
 
 type ActivityEditorPageProps = {
@@ -46,6 +47,7 @@ type Draft = {
   progress: number
   subtasks: Subtask[]
   dueDate?: string
+  recurrence?: Activity['recurrence']
   priority: ActivityPriority
   project: string
 }
@@ -59,6 +61,7 @@ function toDraft(activity?: Activity): Draft {
     progress: activity?.progress ?? 0,
     subtasks: activity?.subtasks ?? [],
     dueDate: activity?.dueDate,
+    recurrence: activity?.recurrence,
     priority: activity?.priority ?? 'medium',
     project: activity?.project ?? '',
   }
@@ -148,12 +151,17 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
         progress: value.progress,
         subtasks: value.subtasks,
         dueDate: value.dueDate,
+        recurrence: value.recurrence,
         priority: value.priority,
         project: value.project,
       }
 
       if (persistedIdRef.current) {
-        const updated = activitiesStore.update(persistedIdRef.current, payload)
+        const updated = activitiesStore.update(
+          persistedIdRef.current,
+          payload,
+          { generateRecurrence: !collaborationRoom },
+        )
         if (updated) persistedDraftRef.current = toDraft(updated)
         return persistedIdRef.current
       }
@@ -165,7 +173,7 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
       if (navigateOnCreate) navigate(`/atividade/${created.id}`, { replace: true })
       return created.id
     },
-    [navigate],
+    [collaborationRoom, navigate],
   )
 
   const persistRef = useRef(persist)
@@ -244,7 +252,7 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
       const updated = activitiesStore.update(activityId, {
         ...parsed.data,
         id: activityId,
-      })
+      }, { generateRecurrence: false })
       if (!updated) return
       const remoteDraft = toDraft(updated)
       const pendingLocalChanges = changedDraftFields(persistedDraftRef.current, draftRef.current)
@@ -280,6 +288,32 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
   }, [activityId, collaborationRoom])
 
   useEffect(() => {
+    if (!collaborationRoom) return
+    const channel = supabase.channel(`shared-activity-index:${collaborationRoom}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'collab_activities',
+        filter: `document_id=eq.${collaborationRoom}`,
+      }, ({ new: row }) => {
+        const remote = activitySchema.safeParse(row.activity)
+        const shared = collaborationDocRef.current?.getMap<unknown>('activity')
+        if (remote.success && shared) {
+          collaborationDocRef.current?.transact(() => {
+            for (const [key, value] of Object.entries(remote.data)) {
+              if (JSON.stringify(shared.get(key)) !== JSON.stringify(value)) shared.set(key, value)
+            }
+          })
+        }
+        void syncSharedActivityRooms().catch((error) => {
+          console.warn('Não foi possível atualizar a próxima atividade recorrente', error)
+        })
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [collaborationRoom])
+
+  useEffect(() => {
     if (!collaborationRoom || !initial) return
     if (skipCollaborationSaveRef.current) {
       skipCollaborationSaveRef.current = false
@@ -291,7 +325,7 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
       const current = activitiesStore.getById(activityId)
       const doc = collaborationDocRef.current
       if (!current || !doc || collaborationStatus !== 'connected') return
-      const updated = activitiesStore.update(activityId, changes)
+      const updated = activitiesStore.update(activityId, changes, { generateRecurrence: false })
       if (!updated) return
       const shared = doc.getMap<unknown>('activity')
       doc.transact(() => {
@@ -461,7 +495,7 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
           onChange={(event) => updateDraft({ description: event.target.value })}
         />
 
-        {!isNew ? (
+        {!isNew && !collaborationRoom ? (
           <ActivityCollaborationActions activity={activitiesStore.getById(activityId) ?? toActivity(draft)} />
         ) : null}
 
@@ -624,11 +658,43 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
               <input
                 type="date"
                 value={draft.dueDate ?? ''}
-                onChange={(event) => updateDraft({ dueDate: event.target.value || undefined })}
+                onChange={(event) => {
+                  const dueDate = event.target.value || undefined
+                  updateDraft({
+                    dueDate,
+                    recurrence: dueDate && draft.recurrence
+                      ? { ...draft.recurrence, dayOfMonth: Number(dueDate.slice(-2)) }
+                      : draft.recurrence,
+                  })
+                }}
               />
               {dueLabel ? (
                 <span className={cn('field-hint', overdue && 'is-overdue')}>{dueLabel}</span>
               ) : null}
+            </label>
+
+            <label className="field recurrence-field">
+                <span>Recorrência</span>
+                <span className="recurrence-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.recurrence)}
+                    disabled={!draft.dueDate}
+                    onChange={(event) => updateDraft({
+                      recurrence: event.target.checked && draft.dueDate
+                        ? {
+                            frequency: 'monthly',
+                            dayOfMonth: Number(draft.dueDate.slice(-2)),
+                            seriesId: draft.recurrence?.seriesId ?? nanoid(12),
+                          }
+                        : undefined,
+                    })}
+                  />
+                  Repetir mensalmente
+                </span>
+                <span className="field-hint">
+                  A próxima atividade será criada ao concluir esta. Em meses curtos, o prazo cai no último dia.
+                </span>
             </label>
 
             <div className="field">

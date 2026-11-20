@@ -65,6 +65,7 @@ export async function joinCollaborativeActivityInvite(
       progress: source.progress,
       subtasks: source.subtasks,
       dueDate: source.dueDate,
+      recurrence: source.recurrence,
       priority: source.priority,
       project: source.project,
     })
@@ -75,8 +76,48 @@ export async function joinCollaborativeActivityInvite(
 }
 
 export async function saveCollaborativeActivity(room: string, activity: Activity): Promise<void> {
-  const { error } = await supabase.from('collab_activities')
-    .update({ activity, updated_at: new Date().toISOString() })
-    .eq('document_id', room)
+  const { error } = await supabase.rpc('save_collab_activity', {
+    p_document_id: room,
+    p_activity: activity,
+  })
   if (error) throw error
+  await syncSharedActivityRooms()
+}
+
+export async function syncSharedActivityRooms(): Promise<void> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
+  if (!sessionData.session) return
+  const { data: memberships, error: membershipError } = await supabase
+    .from('collab_members').select('document_id')
+  if (membershipError) throw membershipError
+  const rooms = [...new Set((memberships ?? []).map((row) => row.document_id))]
+  if (rooms.length === 0) return
+
+  for (let index = 0; index < rooms.length; index += 500) {
+    const batch = rooms.slice(index, index + 500)
+    const { data, error } = await supabase.from('collab_activities')
+      .select('document_id, activity').in('document_id', batch)
+    if (error) throw error
+    for (const row of data ?? []) {
+      const room = row.document_id
+      if (getLocalCollaborativeActivityId(room)) continue
+      const parsed = activitySchema.safeParse(row.activity)
+      if (!parsed.success) continue
+      const source = parsed.data
+      const local = activitiesStore.create({
+        title: source.title,
+        description: source.description,
+        status: source.status,
+        progressMode: source.progressMode,
+        progress: source.progress,
+        subtasks: source.subtasks,
+        dueDate: source.dueDate,
+        recurrence: source.recurrence,
+        priority: source.priority,
+        project: source.project,
+      })
+      remember(room, local.id)
+    }
+  }
 }

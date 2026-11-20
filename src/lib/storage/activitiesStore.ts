@@ -9,6 +9,7 @@ import {
   activitySchema,
   changeActivityStatus,
   normalizeActivity,
+  nextMonthlyDueDate,
   toggleActivitySubtask,
 } from '@/lib/model/activity'
 import { readCollection, STORAGE_KEYS, writeCollection } from './storage'
@@ -44,6 +45,7 @@ export type ActivityDraft = Partial<
     | 'dueDate'
     | 'priority'
     | 'project'
+    | 'recurrence'
   >
 >
 
@@ -83,7 +85,11 @@ export const activitiesStore = {
     return activity
   },
 
-  update(id: string, patch: Partial<Activity>): Activity | undefined {
+  update(
+    id: string,
+    patch: Partial<Activity>,
+    options: { generateRecurrence?: boolean } = {},
+  ): Activity | undefined {
     const index = activities.findIndex((activity) => activity.id === id)
     if (index === -1) return undefined
 
@@ -97,6 +103,27 @@ export const activitiesStore = {
     const activity = normalizeActivity(parsed, now)
     const next = activities.slice()
     next[index] = activity
+    const wasCompleted = activities[index].status === 'done'
+    if (options.generateRecurrence !== false && !wasCompleted && activity.status === 'done' && activity.recurrence && activity.dueDate) {
+      const nextDueDate = nextMonthlyDueDate(activity.dueDate, activity.recurrence, new Date(now))
+      const alreadyExists = next.some(
+        (item) => item.id !== activity.id && item.recurrence?.seriesId === activity.recurrence?.seriesId && item.dueDate === nextDueDate,
+      )
+      if (!alreadyExists) {
+        const nextActivity = activitySchema.parse({
+          ...activity,
+          id: nanoid(12),
+          status: 'todo',
+          progress: 0,
+          subtasks: activity.subtasks.map((subtask) => ({ ...subtask, id: nanoid(10), done: false })),
+          dueDate: nextDueDate,
+          createdAt: now,
+          updatedAt: now,
+          completedAt: undefined,
+        })
+        next.unshift(nextActivity)
+      }
+    }
     replace(next)
     return activity
   },
