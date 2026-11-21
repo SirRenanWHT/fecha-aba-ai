@@ -8,6 +8,7 @@ export type CardTheme = (typeof CARD_THEMES)[number]
 
 export const noteSchema = z.object({
   id: z.string().min(1),
+  collaborationRoom: z.string().uuid().optional(),
   title: z.string().max(200),
   content: z.string(),
   coverImageId: z.string().optional(),

@@ -36,6 +36,7 @@ export type MonthlyRecurrence = z.infer<typeof monthlyRecurrenceSchema>
 
 export const activitySchema = z.object({
   id: z.string().min(1),
+  collaborationRoom: z.string().uuid().optional(),
   title: z.string().max(200),
   description: z.string().default(''),
   status: z.enum(ACTIVITY_STATUSES).default('todo'),

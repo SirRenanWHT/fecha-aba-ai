@@ -239,7 +239,7 @@ export function ActivityEditorPage({ activityId, collaborationRoom }: ActivityEd
   useEffect(() => {
     if (!collaborationRoom || !initial) return
     const doc = new Y.Doc()
-    const provider = new SupabaseYjsProvider(collaborationRoom, doc)
+    const provider = new SupabaseYjsProvider(collaborationRoom, doc, false)
     const shared = doc.getMap<unknown>('activity')
     collaborationDocRef.current = doc
 

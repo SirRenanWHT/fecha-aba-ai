@@ -1,11 +1,12 @@
 import { getSchema } from '@tiptap/core'
+import { generateHTML } from '@tiptap/html'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { generateJSON } from '@tiptap/html'
-import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap'
+import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from '@tiptap/y-tiptap'
 import * as Y from 'yjs'
 import { z } from 'zod'
 import type { Note } from '@/lib/model/note'
@@ -78,6 +79,11 @@ function encode(value: Uint8Array): string {
   return btoa(binary)
 }
 
+function decode(value: string): Uint8Array {
+  const binary = atob(value)
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+}
+
 function makeInitialYjsState(note: NoteTransfer['note']): string {
   const extensions = COLLAB_EDITOR_EXTENSIONS
   const schema = getSchema(extensions)
@@ -103,6 +109,7 @@ export async function createCollaborativeInvite(
   const result = z.object({ document_id: z.string().uuid(), token: z.string().min(30) }).parse(data)
   saveRoomMap(result.document_id, transfer.note.id)
   saveInvite(transfer.note.id, result.token)
+  notesStore.update(transfer.note.id, { collaborationRoom: result.document_id })
   return result.token
 }
 
@@ -124,5 +131,62 @@ export async function joinCollaborativeInvite(
     saveRoomMap(result.document_id, note.id)
   }
   saveInvite(note.id, token)
+  saveRoomMap(result.document_id, note.id)
+  note = notesStore.update(note.id, { collaborationRoom: result.document_id }) ?? note
   return { room: result.document_id, note }
+}
+
+export async function openCollaborativeNoteRoom(
+  room: string,
+  captchaToken?: string,
+): Promise<{ room: string; note: Note }> {
+  await ensureAnonymousSession(captchaToken)
+  const { data, error } = await supabase.from('collab_documents').select('payload').eq('id', room).maybeSingle()
+  if (error) throw error
+  const parsed = z.object({ kind: z.literal('note'), note: noteTransferSchema }).safeParse(data?.payload)
+  if (!parsed.success) throw new Error('A nota compartilhada não está disponível para esta sessão.')
+  const mappedId = getRoomMap()[room]
+  let note = notesStore.getSnapshot().find((item) =>
+    item.collaborationRoom === room || item.id === mappedId || item.id === parsed.data.note.note.id,
+  )
+  if (!note) note = await importNoteTransfer(parsed.data.note)
+  saveRoomMap(room, note.id)
+  note = notesStore.update(note.id, { collaborationRoom: room }) ?? note
+  return { room, note }
+}
+
+/** Reconcile local copies with the latest persisted Yjs state for joined note rooms. */
+export async function syncSharedNoteRooms(): Promise<void> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
+  if (!sessionData.session) return
+  const { data: memberships, error: membershipError } = await supabase
+    .from('collab_members').select('document_id')
+  if (membershipError) throw membershipError
+  const rooms = [...new Set((memberships ?? []).map((row) => row.document_id))]
+  for (const room of rooms) {
+    const { data: document, error: documentError } = await supabase
+      .from('collab_documents').select('payload').eq('id', room).maybeSingle()
+    if (documentError) throw documentError
+    const transfer = noteTransferSchema.safeParse((document?.payload as { kind?: string; note?: unknown } | null)?.kind === 'note'
+      ? (document?.payload as { note: unknown }).note : null)
+    if (!transfer.success) continue
+
+    const { data: updates, error: updatesError } = await supabase
+      .from('collab_yjs_updates').select('update_b64').eq('room', room).order('id')
+    if (updatesError) throw updatesError
+    const doc = new Y.Doc()
+    for (const row of updates ?? []) if (row.update_b64) Y.applyUpdate(doc, decode(row.update_b64))
+    const content = generateHTML(yDocToProsemirrorJSON(doc, 'prosemirror'), COLLAB_EDITOR_EXTENSIONS)
+    const title = doc.getText('title').toString()
+    doc.destroy()
+
+    const mappedId = getRoomMap()[room]
+    const local = notesStore.getSnapshot().find((item) =>
+      item.collaborationRoom === room || item.id === mappedId || item.id === transfer.data.note.id,
+    )
+    const note = local ?? await importNoteTransfer(transfer.data)
+    saveRoomMap(room, note.id)
+    notesStore.update(note.id, { title, content, collaborationRoom: room })
+  }
 }

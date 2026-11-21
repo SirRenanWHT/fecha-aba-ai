@@ -36,6 +36,7 @@ export async function createCollaborativeActivityInvite(
   if (error) throw error
   const result = z.object({ document_id: z.string().uuid(), token: z.string().min(30) }).parse(data)
   remember(result.document_id, activity.id, result.token)
+  activitiesStore.update(activity.id, { collaborationRoom: result.document_id }, { generateRecurrence: false })
   return { token: result.token, room: result.document_id }
 }
 
@@ -72,6 +73,7 @@ export async function joinCollaborativeActivityInvite(
     remember(result.document_id, activity.id)
   }
   remember(result.document_id, activity.id, token)
+  activity = activitiesStore.update(activity.id, { collaborationRoom: result.document_id }, { generateRecurrence: false }) ?? activity
   return { room: result.document_id, activity: activitySchema.parse(activity) }
 }
 
@@ -82,6 +84,8 @@ export async function saveCollaborativeActivity(room: string, activity: Activity
   })
   if (error) throw error
   await syncSharedActivityRooms()
+  void import('./push').then(({ notifySharedUpdate }) => notifySharedUpdate(room, 'activity'))
+    .catch((pushError) => console.warn('Não foi possível enviar o aviso de atualização', pushError))
 }
 
 export async function syncSharedActivityRooms(): Promise<void> {
@@ -101,10 +105,17 @@ export async function syncSharedActivityRooms(): Promise<void> {
     if (error) throw error
     for (const row of data ?? []) {
       const room = row.document_id
-      if (getLocalCollaborativeActivityId(room)) continue
       const parsed = activitySchema.safeParse(row.activity)
       if (!parsed.success) continue
       const source = parsed.data
+      const localId = getLocalCollaborativeActivityId(room)
+      const existing = (localId ? activitiesStore.getById(localId) : undefined)
+        ?? activitiesStore.getSnapshot().find((item) => item.collaborationRoom === room)
+      if (existing) {
+        remember(room, existing.id)
+        activitiesStore.update(existing.id, { ...source, id: existing.id, collaborationRoom: room }, { generateRecurrence: false })
+        continue
+      }
       const local = activitiesStore.create({
         title: source.title,
         description: source.description,
@@ -118,6 +129,7 @@ export async function syncSharedActivityRooms(): Promise<void> {
         project: source.project,
       })
       remember(room, local.id)
+      activitiesStore.update(local.id, { collaborationRoom: room }, { generateRecurrence: false })
     }
   }
 }

@@ -28,3 +28,7 @@ export function getLocalCollaborativeActivityId(room: string): string | undefine
 export function getCollaborativeActivityRoom(activityId: string): string | undefined {
   return Object.entries(readMap(ROOM_MAP_KEY)).find(([, localId]) => localId === activityId)?.[0]
 }
+
+export function isCollaborativeActivity(activity: { id: string; collaborationRoom?: string }): boolean {
+  return Boolean(activity.collaborationRoom || getCollaborativeActivityRoom(activity.id))
+}

@@ -47,8 +47,8 @@ por convite ou quando um aparelho ativa as notificações push.
   uma única vez e a disponibiliza para todos os participantes.
 - Notificações locais opcionais um dia antes e no dia do vencimento, verificadas quando o app está
   aberto.
-- Atividades compartilhadas também podem enviar notificações push com o app fechado. Cada aparelho
-  precisa ativar as notificações em **Ajustes → Lembretes de prazo**.
+- Atividades compartilhadas podem enviar lembretes de prazo e notas/atividades compartilhadas
+  enviam avisos de alteração por push. Cada aparelho precisa ativar as notificações em **Ajustes**.
 
 ### PWA e atualizações
 
@@ -128,7 +128,8 @@ backend, abra **SQL Editor** no painel Supabase e execute os scripts nesta ordem
 3. `supabase/shared-activity-recurrence.sql` — salvamento coordenado e geração única da próxima
    ocorrência compartilhada.
 4. `supabase/push-subscriptions.sql` — inscrições push por aparelho e políticas para cada usuário.
-5. `supabase/shared-activity-push.sql` — registros de entrega para impedir notificações duplicadas.
+5. `supabase/shared-activity-push.sql` — deduplicação dos lembretes de prazo.
+6. `supabase/shared-update-push.sql` — deduplicação dos avisos de alterações compartilhadas.
 
 Para a colaboração sem cadastro, habilite **Anonymous Sign-Ins** no Supabase Auth e configure o
 hCaptcha no Supabase Auth. O app usa a Sitekey pública para mostrar o desafio; o secret do hCaptcha
@@ -137,16 +138,16 @@ fica no painel do Supabase. O domínio publicado precisa estar permitido na allo
 para `127.0.0.1` e permita esse hostname no hCaptcha; `localhost` e `127.0.0.1` não são hosts
 aceitos pelo hCaptcha deste projeto.
 
-## Notificações push de atividades compartilhadas
+## Notificações push
 
-O envio com o app fechado usa a Edge Function `send-deadline-push`, Web Push/VAPID e um job Supabase
-Cron executado a cada 15 minutos. O serviço considera o fuso horário salvo em cada aparelho, envia
-um aviso no dia anterior e outro no dia do vencimento, ignora atividades concluídas e remove
-inscrições que o provedor de push já invalidou. Cada participante recebe o aviso nos aparelhos em
-que ativou os lembretes.
+Os lembretes de prazo usam `send-deadline-push`, Web Push/VAPID e um job Supabase Cron executado a
+cada 15 minutos. Os avisos de alteração usam `send-shared-update-push`: depois de salvar no Supabase,
+o app chama a função autenticada, que avisa os outros participantes e limita cada aparelho a um
+aviso por sala a cada cinco minutos. Ao abrir ou voltar ao app, o cliente busca o estado mais recente.
+As duas funções removem inscrições que o provedor de push já invalidou.
 
-O envio em segundo plano cobre **atividades compartilhadas**. Para atividades locais não
-compartilhadas, os lembretes funcionam enquanto o app está aberto.
+Os lembretes de prazo em segundo plano cobrem **atividades compartilhadas**. Para atividades locais
+não compartilhadas, os lembretes funcionam enquanto o app está aberto.
 
 ### Segredos e publicação
 
@@ -180,11 +181,17 @@ Para criar as chaves em uma configuração nova:
    $env:SUPABASE_HOME = Join-Path (Get-Location) ".supabase-home"
    ```
 
-4. No arquivo `supabase/schedule-deadline-push.sql`, substitua
+4. Publique também a função de avisos de alteração:
+
+   ```powershell
+   npx supabase functions deploy send-shared-update-push --remote=rcmssdqsbbxpjgumblfb --use-api
+   ```
+
+5. No arquivo `supabase/schedule-deadline-push.sql`, substitua
    `PREENCHA_COM_A_MESMA_CHAVE` pela chave do passo 2 e execute o arquivo **uma única vez** no SQL
    Editor. Ele ativa `pg_cron`, `pg_net`, Vault e agenda a função.
-5. Depois de cadastrar a variável pública no GitHub, publique o site novamente. Em cada aparelho,
-   permita notificações no navegador e ative **Ajustes → Lembretes de prazo**. Se o lembrete local
+6. Depois de cadastrar a variável pública no GitHub, publique o site novamente. Em cada aparelho,
+   permita notificações no navegador e ative **Ajustes → Notificações**. Se o lembrete local
    já estava ativado antes de configurar o push, desative e ative novamente para cadastrar a
    inscrição do aparelho.
 
@@ -216,9 +223,11 @@ supabase/
   shared-activities.sql         colaboração de atividades
   shared-activity-recurrence.sql geração coordenada de recorrências compartilhadas
   push-subscriptions.sql        inscrição push por aparelho
-  shared-activity-push.sql      deduplicação de entregas
+  shared-activity-push.sql      deduplicação dos lembretes de prazo
+  shared-update-push.sql        deduplicação de avisos de alteração
   schedule-deadline-push.sql    extensões Vault/Cron e agendamento
-  functions/send-deadline-push/ envio Web Push
+  functions/send-deadline-push/ envio dos lembretes de prazo
+  functions/send-shared-update-push/ avisos de alteração compartilhada
 scripts/                        servidor, geradores de chaves e verificações e2e
 public/                         manifest, ícones e arquivos estáticos
 ```

@@ -13,7 +13,7 @@ import { FONT_STACKS, type Note } from '@/lib/model/note'
 import { notesStore } from '@/lib/storage/notesStore'
 import { htmlToText } from '@/lib/utils/html'
 import { coverTransform } from '@/lib/utils/cover'
-import { COLLAB_EDITOR_EXTENSIONS, joinCollaborativeInvite } from '@/lib/collaboration/notes'
+import { COLLAB_EDITOR_EXTENSIONS, joinCollaborativeInvite, openCollaborativeNoteRoom } from '@/lib/collaboration/notes'
 import { SupabaseYjsProvider } from '@/lib/collaboration/provider'
 import * as Y from 'yjs'
 import { useToast } from '@/components/Toast'
@@ -21,7 +21,7 @@ import { useToast } from '@/components/Toast'
 type Session = { room: string; note: Note; doc: Y.Doc; provider: SupabaseYjsProvider }
 type Status = 'loading' | 'connecting' | 'connected' | 'error'
 
-export function CollaborativeNotePage() {
+export function CollaborativeNotePage({ room }: { room?: string } = {}) {
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const notify = useToast()
@@ -70,7 +70,9 @@ export function CollaborativeNotePage() {
       setCaptchaMessage('')
       setCaptchaVisible(false)
       try {
-        const joined = await joinCollaborativeInvite(token, captchaToken)
+        const joined = room
+          ? await openCollaborativeNoteRoom(room, captchaToken)
+          : await joinCollaborativeInvite(token, captchaToken)
         if (cancelled) return
 
         const doc = new Y.Doc()
@@ -152,7 +154,7 @@ export function CollaborativeNotePage() {
       activeDoc?.destroy()
       sessionRef.current = null
     }
-  }, [token])
+  }, [token, room])
 
   function changeTitle(value: string): void {
     setTitle(value)

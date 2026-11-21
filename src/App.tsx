@@ -16,6 +16,8 @@ import { getCollaborativeActivityRoom, getCollaborativeActivityToken } from '@/l
 import { useSettings } from '@/hooks/useStores'
 import { applyTheme } from '@/lib/storage/settingsStore'
 import { getCollaborativeTokenForNote } from '@/lib/collaboration/links'
+import { notesStore } from '@/lib/storage/notesStore'
+import { activitiesStore } from '@/lib/storage/activitiesStore'
 
 function ThemeWatcher() {
   const { theme } = useSettings()
@@ -37,6 +39,10 @@ function ThemeWatcher() {
 
 function EditorRoute() {
   const { id = 'nova' } = useParams()
+  const note = notesStore.getById(id)
+  if (note?.collaborationRoom) {
+    return <Suspense fallback={<div className="collab-message">Carregando nota compartilhada…</div>}><CollaborativeNotePage room={note.collaborationRoom} /></Suspense>
+  }
   const collabToken = id === 'nova' ? undefined : getCollaborativeTokenForNote(id)
   if (collabToken) return <Navigate to={`/colaborar/${collabToken}`} replace />
   return <NoteEditorPage noteId={id} />
@@ -45,7 +51,7 @@ function EditorRoute() {
 function ActivityEditorRoute() {
   const { id = 'nova' } = useParams()
   const { search } = useLocation()
-  const room = new URLSearchParams(search).get('room') ?? getCollaborativeActivityRoom(id)
+  const room = new URLSearchParams(search).get('room') ?? activitiesStore.getById(id)?.collaborationRoom ?? getCollaborativeActivityRoom(id)
   const inviteToken = id === 'nova' || room ? undefined : getCollaborativeActivityToken(id)
   if (inviteToken) return <Navigate to={`/atividade-colaborar/${inviteToken}`} replace />
   return <Suspense fallback={<div className="collab-message">Carregando atividade…</div>}><ActivityEditorPage activityId={id} collaborationRoom={room} /></Suspense>

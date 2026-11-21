@@ -18,13 +18,14 @@ import { activitiesFilename, downloadBlob } from '@/lib/share/download'
 import { buildActivitiesPayload, importActivitiesPayload } from '@/lib/share/transfer'
 import { sharePayloadSchema, type ActivitiesPayload } from '@/lib/share/types'
 import { activitiesStore } from '@/lib/storage/activitiesStore'
-import { getCollaborativeActivityRoom } from '@/lib/collaboration/activity-links'
+import { getCollaborativeActivityRoom, isCollaborativeActivity } from '@/lib/collaboration/activity-links'
 import { cn } from '@/lib/utils/cn'
 import { ActivityRow } from './ActivityRow'
 import { KanbanCard } from './KanbanCard'
 
 type ViewMode = 'list' | 'kanban'
 type ActivityFilter = 'all' | ActivityStatus | 'overdue'
+type SourceFilter = 'all' | 'personal' | 'shared'
 
 const FILTERS: Array<{ value: ActivityFilter; label: string }> = [
   { value: 'all', label: 'Todas' },
@@ -33,6 +34,11 @@ const FILTERS: Array<{ value: ActivityFilter; label: string }> = [
   { value: 'done', label: 'Concluídas' },
   { value: 'paused', label: 'Pausadas' },
   { value: 'overdue', label: 'Atrasadas' },
+]
+const SOURCE_FILTERS: Array<{ value: SourceFilter; label: string }> = [
+  { value: 'all', label: 'Todas' },
+  { value: 'personal', label: 'Pessoais' },
+  { value: 'shared', label: 'Compartilhadas' },
 ]
 
 const KANBAN_COLUMNS: ActivityStatus[] = ['todo', 'doing', 'paused', 'done']
@@ -67,6 +73,7 @@ export function ActivitiesPage() {
 
   const [view, setView] = useState<ViewMode>('list')
   const [filter, setFilter] = useState<ActivityFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
   const [pendingImport, setPendingImport] = useState<ActivitiesPayload | null>(null)
 
@@ -88,15 +95,27 @@ export function ActivitiesPage() {
           event: 'UPDATE',
           schema: 'public',
           table: 'collab_activities',
-        }, ({ new: row }) => {
-          const activity = row.activity as Partial<Activity> | undefined
-          if (activity?.status !== 'done' || !activity.recurrence) return
+        }, () => {
           void syncSharedActivityRooms().catch((error) => {
-            console.warn('Não foi possível atualizar a próxima atividade recorrente', error)
+            console.warn('Não foi possível atualizar as atividades compartilhadas', error)
           })
         })
         .subscribe()
       stopRealtime = () => { void supabase.removeChannel(channel) }
+      const refresh = () => {
+        if (document.visibilityState === 'hidden') return
+        void syncSharedActivityRooms().catch((error) => console.warn('Não foi possível atualizar as atividades compartilhadas', error))
+      }
+      window.addEventListener('focus', refresh)
+      window.addEventListener('pageshow', refresh)
+      document.addEventListener('visibilitychange', refresh)
+      const removeRefresh = () => {
+        window.removeEventListener('focus', refresh)
+        window.removeEventListener('pageshow', refresh)
+        document.removeEventListener('visibilitychange', refresh)
+      }
+      const removeRealtime = stopRealtime
+      stopRealtime = () => { removeRefresh(); removeRealtime?.() }
     }).catch((error) => {
       console.warn('Não foi possível iniciar a sincronização de atividades', error)
     })
@@ -106,30 +125,35 @@ export function ActivitiesPage() {
     }
   }, [])
 
+  const sourceActivities = useMemo(() => activities.filter((activity) => {
+    const shared = isCollaborativeActivity(activity)
+    return sourceFilter === 'all' || (sourceFilter === 'shared' ? shared : !shared)
+  }), [activities, sourceFilter])
+
   const counts = useMemo(
     () => ({
-      all: activities.length,
-      todo: activities.filter((activity) => activity.status === 'todo').length,
-      doing: activities.filter((activity) => activity.status === 'doing').length,
-      done: activities.filter((activity) => activity.status === 'done').length,
-      paused: activities.filter((activity) => activity.status === 'paused').length,
-      overdue: activities.filter(isActivityOverdue).length,
+      all: sourceActivities.length,
+      todo: sourceActivities.filter((activity) => activity.status === 'todo').length,
+      doing: sourceActivities.filter((activity) => activity.status === 'doing').length,
+      done: sourceActivities.filter((activity) => activity.status === 'done').length,
+      paused: sourceActivities.filter((activity) => activity.status === 'paused').length,
+      overdue: sourceActivities.filter(isActivityOverdue).length,
     }),
-    [activities],
+    [sourceActivities],
   )
 
   const projects = useMemo(() => {
     const names = new Set<string>()
-    for (const activity of activities) {
+    for (const activity of sourceActivities) {
       const project = activity.project.trim()
       if (project) names.add(project)
     }
     return [...names].sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  }, [activities])
+  }, [sourceActivities])
 
   const filtered = useMemo(
     () =>
-      activities
+      sourceActivities
         .filter((activity) => {
           if (projectFilter && activity.project.trim() !== projectFilter) return false
           if (filter === 'overdue') return isActivityOverdue(activity)
@@ -137,15 +161,15 @@ export function ActivitiesPage() {
           return true
         })
         .sort(compareActivities),
-    [activities, filter, projectFilter],
+    [sourceActivities, filter, projectFilter],
   )
 
   const kanbanItems = useMemo(
     () =>
-      activities
+      sourceActivities
         .filter((activity) => !projectFilter || activity.project.trim() === projectFilter)
         .sort(compareActivities),
-    [activities, projectFilter],
+    [sourceActivities, projectFilter],
   )
 
   const completedPercent =
@@ -160,7 +184,7 @@ export function ActivitiesPage() {
       left: active.offsetLeft - container.clientWidth / 2 + active.clientWidth / 2,
       behavior: 'smooth',
     })
-  }, [filter, view])
+  }, [filter, sourceFilter, view])
 
   function openActivity(id: string): void {
     navigate(`/atividade/${id}`)
@@ -172,6 +196,7 @@ export function ActivitiesPage() {
 
   function clearFilters(): void {
     setFilter('all')
+    setSourceFilter('all')
     setProjectFilter(null)
   }
 
@@ -181,7 +206,7 @@ export function ActivitiesPage() {
   }
 
   function updateStatus(activity: Activity, status: ActivityStatus): void {
-    const room = getCollaborativeActivityRoom(activity.id)
+    const room = activity.collaborationRoom ?? getCollaborativeActivityRoom(activity.id)
     if (!room) {
       activitiesStore.changeStatus(activity.id, status)
       return
@@ -417,6 +442,22 @@ export function ActivitiesPage() {
                 Deslize para ver as etapas e mude pelo seletor do card.
               </span>
             )}
+          </div>
+
+          <div className="tabs" role="tablist" aria-label="Origem das atividades">
+            {SOURCE_FILTERS.map((item) => {
+              const amount = item.value === 'all'
+                ? activities.length
+                : activities.filter((activity) => isCollaborativeActivity(activity) === (item.value === 'shared')).length
+              return (
+                <button key={item.value} type="button" role="tab"
+                  aria-selected={sourceFilter === item.value}
+                  className={cn('tab', sourceFilter === item.value && 'is-active')}
+                  onClick={() => setSourceFilter(item.value)}>
+                  {item.label}<span className="tab-count">{amount}</span>
+                </button>
+              )
+            })}
           </div>
 
           {projects.length > 0 ? (

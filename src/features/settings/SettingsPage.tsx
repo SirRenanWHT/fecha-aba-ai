@@ -321,10 +321,11 @@ export function SettingsPage() {
 
       <section className="settings-card">
         <div className="settings-card-head">
-          <h2 className="settings-title">Lembretes de prazo</h2>
+          <h2 className="settings-title">Notificações</h2>
           <p className="settings-sub">
-            Receba avisos um dia antes e no dia do vencimento. Com push configurado, atividades
-            compartilhadas também podem notificar este dispositivo com o app fechado.
+            Receba lembretes um dia antes e no dia do vencimento. Com push configurado, este
+            dispositivo também recebe avisos quando uma nota ou atividade compartilhada é alterada,
+            mesmo com o app fechado.
           </p>
         </div>
         {notificationPermission === 'unsupported' ? (
@@ -341,7 +342,7 @@ export function SettingsPage() {
             onClick={() => void handleDeadlineNotifications()}
             disabled={pushBusy}
           >
-            {pushBusy ? 'Atualizando…' : settings.deadlineNotifications ? 'Desativar lembretes' : 'Ativar notificações'}
+            {pushBusy ? 'Atualizando…' : settings.deadlineNotifications ? 'Desativar notificações' : 'Ativar notificações'}
           </Button>
         )}
         {pushCaptchaVisible ? (

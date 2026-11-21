@@ -14,7 +14,7 @@ self.addEventListener('push', (event) => {
     payload = { body: event.data?.text() ?? '' }
   }
   event.waitUntil(self.registration.showNotification(payload.title || 'Lembrete do Caderno', {
-    body: payload.body || 'Uma atividade compartilhada está perto do vencimento.',
+    body: payload.body || 'Você tem uma atualização no Caderno.',
     icon: `${BASE}icons/icon-192.png`,
     tag: payload.tag || 'shared-activity-reminder',
     data: { url: payload.url || '#/atividades' },

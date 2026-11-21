@@ -59,3 +59,10 @@ export async function disableDeadlinePush(): Promise<void> {
   await subscription.unsubscribe()
   if (error) throw error
 }
+
+export async function notifySharedUpdate(room: string, type: 'note' | 'activity'): Promise<void> {
+  const { error } = await supabase.functions.invoke('send-shared-update-push', {
+    body: { room, type },
+  })
+  if (error) throw error
+}

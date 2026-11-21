@@ -30,6 +30,7 @@ export class SupabaseYjsProvider {
   constructor(
     private readonly room: string,
     private readonly doc: Y.Doc,
+    private readonly notifyOnPersist = true,
   ) {
     this.channel = supabase.channel(`yjs:${room}`, {
       config: { private: true, broadcast: { self: false } },
@@ -134,6 +135,10 @@ export class SupabaseYjsProvider {
       .from('collab_yjs_updates')
       .insert({ room: this.room, update_b64: encode(merged) })
     if (error) this.setStatus('error')
+    else if (this.notifyOnPersist) {
+      void import('./push').then(({ notifySharedUpdate }) => notifySharedUpdate(this.room, 'note'))
+        .catch((pushError) => console.warn('Não foi possível enviar o aviso de atualização', pushError))
+    }
   }
 
   destroy(): void {

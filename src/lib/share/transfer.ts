@@ -60,8 +60,11 @@ export async function buildNoteTransfer(note: Note): Promise<NoteTransfer> {
     }
   }
 
+  const shareableNote = Object.fromEntries(
+    Object.entries(note).filter(([key]) => key !== 'collaborationRoom'),
+  ) as Omit<Note, 'collaborationRoom'>
   return {
-    note: { ...note, content: sanitizeNoteHtml(note.content) },
+    note: { ...shareableNote, content: sanitizeNoteHtml(note.content) },
     cover,
   }
 }
@@ -87,7 +90,11 @@ export async function buildBackupPayload(notes: Note[]): Promise<BackupPayload> 
     app: APP_NAME,
     version: APP_VERSION,
     notes: transfers,
-    activities: activitiesStore.getSnapshot(),
+    activities: activitiesStore.getSnapshot().map((activity) => {
+      const shareable = { ...activity }
+      delete shareable.collaborationRoom
+      return shareable
+    }),
     settings: { theme: settingsStore.getSnapshot().theme },
   }
 }
@@ -154,7 +161,11 @@ export function buildActivitiesPayload(): ActivitiesPayload {
     createdAt: new Date().toISOString(),
     app: APP_NAME,
     version: APP_VERSION,
-    activities: activitiesStore.getSnapshot(),
+    activities: activitiesStore.getSnapshot().map((activity) => {
+      const shareable = { ...activity }
+      delete shareable.collaborationRoom
+      return shareable
+    }),
   }
 }
 

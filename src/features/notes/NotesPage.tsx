@@ -7,17 +7,24 @@ import { useToast } from '@/components/Toast'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useNotes } from '@/hooks/useStores'
 import type { Note } from '@/lib/model/note'
+import { isCollaborativeNote } from '@/lib/collaboration/links'
 import { notesStore } from '@/lib/storage/notesStore'
 import { cn } from '@/lib/utils/cn'
 import { htmlToText } from '@/lib/utils/html'
 import { NoteCard } from './NoteCard'
 
 type FilterTab = 'all' | 'pinned' | 'archived'
+type SourceFilter = 'all' | 'personal' | 'shared'
 
 const TABS: Array<{ value: FilterTab; label: string }> = [
   { value: 'all', label: 'Todas' },
   { value: 'pinned', label: 'Fixadas' },
   { value: 'archived', label: 'Arquivadas' },
+]
+const SOURCE_TABS: Array<{ value: SourceFilter; label: string }> = [
+  { value: 'all', label: 'Todas' },
+  { value: 'personal', label: 'Pessoais' },
+  { value: 'shared', label: 'Compartilhadas' },
 ]
 
 export function NotesPage() {
@@ -29,6 +36,7 @@ export function NotesPage() {
   const searchRef = useRef<HTMLInputElement>(null)
 
   const [tab, setTab] = useState<FilterTab>('all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [query, setQuery] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const deferredQuery = useDeferredValue(query)
@@ -41,6 +49,11 @@ export function NotesPage() {
     }),
     [notes],
   )
+  const sourceCounts = useMemo(() => ({
+    all: notes.filter((note) => !note.archived).length,
+    personal: notes.filter((note) => !note.archived && !isCollaborativeNote(note)).length,
+    shared: notes.filter((note) => !note.archived && isCollaborativeNote(note)).length,
+  }), [notes])
 
   const tags = useMemo(() => {
     const counter = new Map<string, number>()
@@ -53,12 +66,50 @@ export function NotesPage() {
     )
   }, [notes])
 
+  useEffect(() => {
+    let cancelled = false
+    let channel: { unsubscribe?: () => void } | undefined
+    let timer: number | undefined
+    const sync = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void import('@/lib/collaboration/notes').then(({ syncSharedNoteRooms }) => syncSharedNoteRooms())
+          .catch((error) => console.warn('Não foi possível atualizar as notas compartilhadas', error))
+      }, 300)
+    }
+    void Promise.all([
+      import('@/lib/collaboration/notes'),
+      import('@/lib/collaboration/supabase'),
+    ]).then(([collaboration, supabaseModule]) => {
+      if (cancelled) return
+      void collaboration.syncSharedNoteRooms().catch((error) => console.warn('Não foi possível atualizar as notas compartilhadas', error))
+      const realtime = supabaseModule.supabase.channel('shared-notes-index')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'collab_yjs_updates' }, sync)
+        .subscribe()
+      channel = realtime
+    }).catch((error) => console.warn('Não foi possível iniciar a sincronização das notas', error))
+    window.addEventListener('focus', sync)
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('pageshow', sync)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      window.removeEventListener('focus', sync)
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('pageshow', sync)
+      if (channel) void import('@/lib/collaboration/supabase').then(({ supabase }) => supabase.removeChannel(channel as never))
+    }
+  }, [])
+
   const filtered = useMemo(() => {
     const needle = deferredQuery.trim().toLocaleLowerCase('pt-BR')
     return notes
       .filter((note) => {
         if (tab === 'archived' ? !note.archived : note.archived) return false
         if (tab === 'pinned' && !note.pinned) return false
+        const isShared = isCollaborativeNote(note)
+        if (sourceFilter === 'shared' && !isShared) return false
+        if (sourceFilter === 'personal' && isShared) return false
         if (selectedTags.length > 0 && !selectedTags.every((tag) => note.tags.includes(tag))) {
           return false
         }
@@ -71,7 +122,7 @@ export function NotesPage() {
       .sort(
         (a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt),
       )
-  }, [notes, tab, selectedTags, deferredQuery])
+  }, [notes, tab, sourceFilter, selectedTags, deferredQuery])
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -92,7 +143,7 @@ export function NotesPage() {
     return () => window.removeEventListener('keydown', handleShortcut)
   }, [])
 
-  const isFiltering = query.trim().length > 0 || selectedTags.length > 0
+  const isFiltering = query.trim().length > 0 || selectedTags.length > 0 || sourceFilter !== 'all'
 
   function toggleTag(tag: string): void {
     setSelectedTags((current) =>
@@ -104,6 +155,7 @@ export function NotesPage() {
     setQuery('')
     setSelectedTags([])
     setTab('all')
+    setSourceFilter('all')
   }
 
   function handleTogglePin(note: Note): void {
@@ -187,6 +239,17 @@ export function NotesPage() {
             >
               {item.label}
               <span className="tab-count">{counts[item.value]}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="tabs" role="tablist" aria-label="Origem das notas">
+          {SOURCE_TABS.map((item) => (
+            <button key={item.value} type="button" role="tab"
+              aria-selected={sourceFilter === item.value}
+              className={cn('tab', sourceFilter === item.value && 'is-active')}
+              onClick={() => setSourceFilter(item.value)}>
+              {item.label}<span className="tab-count">{sourceCounts[item.value]}</span>
             </button>
           ))}
         </div>
