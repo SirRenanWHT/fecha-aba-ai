@@ -444,7 +444,7 @@ export function ActivitiesPage() {
             )}
           </div>
 
-          <div className="tabs" role="tablist" aria-label="Origem das atividades">
+          <div className="tabs activity-source-filter" role="tablist" aria-label="Origem das atividades">
             {SOURCE_FILTERS.map((item) => {
               const amount = item.value === 'all'
                 ? activities.length
